@@ -128,6 +128,7 @@
       background: #181818;
     }
     .run-empty { color: #7a7a7a; font-style: italic; }
+    .run-debug-sub { margin-top: 10px; }
     @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } canvas { height: 420px; } }
   </style>
 </head>
@@ -149,7 +150,7 @@
         <div class="sub">Dot histogram: x = spins survived, y = runs ended · dot color: green = common boons, red = rare boons</div>
         <canvas id="plot" width="900" height="560" role="img" aria-label="Dot histogram of simulation runs. Horizontal axis is spins survived, vertical axis is number of runs that ended at that spin count. Each dot is colored green for runs with common boon picks and red for runs with rare boon picks."></canvas>
         <div id="status" role="status" aria-live="polite"></div>
-        <div class="sub" style="margin-top:10px;">Run debug: each picked boon is boxed by its own rarity, with an outer box showing the highest rarity offered in that shop</div>
+        <div class="sub run-debug-sub">Run debug: each picked boon is boxed by its own rarity, with an outer box showing the highest rarity offered in that shop</div>
         <div id="runLog" role="log" aria-live="polite" aria-label="Simulation run log"></div>
       </div>
     </div>
@@ -256,7 +257,6 @@
         inner.title =
           'Picked: ' + formatBoonMeta(pick.boon) +
           ' | Highest rarity offered this shop: ' + pick.shopHighestRarity;
-        outer.title = inner.title;
         outer.appendChild(inner);
         picksWrap.appendChild(outer);
       });
