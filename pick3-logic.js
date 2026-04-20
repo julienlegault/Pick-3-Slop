@@ -15,6 +15,7 @@
   var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
   var MIN_LOSE_TILE_MULT = 0.08;
+  var GROWTH_WIN_RATIO_STEP = 1 / 18;
 
   function rarityMult(rarity, gl) {
     var arr = RARITY_SCALE[rarity] || [1];
@@ -799,10 +800,10 @@
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  function growthWinRatio(growthCount) {
-    if (growthCount < 3) return 2 / 3;
-    if (growthCount < 5) return 5 / 9;
-    var reduced = (5 / 9) - ((growthCount - 4) * (1 / 18));
+  function growthWinRatio(growthLevel) {
+    if (growthLevel < 3) return 2 / 3;
+    if (growthLevel < 5) return 5 / 9;
+    var reduced = (5 / 9) - ((growthLevel - 4) * GROWTH_WIN_RATIO_STEP);
     return clamp(reduced, 1 / 3, 5 / 9);
   }
 
@@ -824,7 +825,7 @@
     return { tiles: out, nextId: nextId };
   }
 
-  function applyBoon(boon, tiles, boons, nid, growthCount) {
+  function applyBoon(boon, tiles, boons, nid, growthLevel) {
     var t2 = tiles.slice();
     var picked = Object.assign({}, boon, { iid: boon.iid || makeIid(boon.id) });
     if (picked.randomValue && picked.flatBonus === undefined) picked.flatBonus = 0;
@@ -876,7 +877,7 @@
     var grew = t2.every(function(t) { return t.type === 'win'; });
     if (grew) {
       var n = t2.length;
-      var ratio = growthWinRatio(Number.isFinite(growthCount) ? growthCount : 0);
+      var ratio = growthWinRatio(Number.isFinite(growthLevel) ? growthLevel : 0);
       var grown = buildGrowthTiles(n * 3, ratio, id);
       t2 = grown.tiles;
       id = grown.nextId;
