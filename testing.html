@@ -116,6 +116,7 @@
   <script src="./pick3-logic.js"></script>
   <script>
     var BASE_BOONS = window.Pick3Logic.BOONS;
+    // Higher number means rarer boon so default priority starts from the rarest at the top.
     var RARITY_RANK = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
     var orderedBoons = BASE_BOONS.slice().sort(function(a, b) {
       var rarityDiff = (RARITY_RANK[b.rarity] || 0) - (RARITY_RANK[a.rarity] || 0);
@@ -297,9 +298,13 @@
       var groupedBySpins = {};
       for (var j = 0; j < data.length; j++) {
         var d = data[j];
-        if (!groupedBySpins[d.spins]) groupedBySpins[d.spins] = { sum: 0, count: 0 };
-        groupedBySpins[d.spins].sum += d.avgBoonNumber;
-        groupedBySpins[d.spins].count += 1;
+        var group = groupedBySpins[d.spins];
+        if (!group) {
+          group = { sum: 0, count: 0 };
+          groupedBySpins[d.spins] = group;
+        }
+        group.sum += d.avgBoonNumber;
+        group.count += 1;
       }
 
       var curvePoints = Object.keys(groupedBySpins)
@@ -310,7 +315,11 @@
         })
         .sort(function(a, b) { return a.spins - b.spins; });
 
-      if (!curvePoints.length) return;
+      if (!curvePoints.length) {
+        ctx.fillStyle = '#777';
+        ctx.fillText('No averaged data to display.', ml + 8, mt + 18);
+        return;
+      }
 
       ctx.strokeStyle = '#D4AF37';
       ctx.lineWidth = 2.5;
