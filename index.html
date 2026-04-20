@@ -62,11 +62,11 @@
   <script src="./pick3-logic.js"></script>
   <script type="text/babel">
     const { useState, useRef, useCallback } = React;
-    const {
-      CX, CY, R, LAND, BOONS, RC, INIT_TILES,
-      slicePath, revealWedge, buildLayout, calcAngles,
-      pickWeighted, drawBoons, tryRescue, applyBoon,
-    } = window.Pick3Logic;
+      const {
+        CX, CY, R, LAND, BOONS, RC, INIT_TILES,
+        slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
+        pickWeighted, drawBoons, getShopRerolls, rerollShop, tryRescue, applyBoon,
+      } = window.Pick3Logic;
 
     // BoonTag — tooltip via CSS class toggle + hover, no portal
     function BoonTag(props) {
@@ -92,7 +92,7 @@
             fontFamily: "'Cinzel', serif",
           })}
         >
-          {b.name}{b.effect === 'shield' && b.charges > 0 ? ' (' + b.charges + ')' : ''}
+          {b.name}{b.charges > 0 ? ' (' + b.charges + ')' : ''}
           <span
             className="boon-tip"
             style={{ border: '1px solid ' + c, boxShadow: '0 4px 24px rgba(0,0,0,.8), 0 0 12px ' + c + '30' }}
@@ -113,6 +113,7 @@
     }
 
     function App() {
+      var MAX_DEAD_ZONE_RETRIES = 18;
       var _s1  = useState(INIT_TILES); var tiles = _s1[0]; var setTiles = _s1[1];
       var _s2  = useState([]);         var boons = _s2[0]; var setBoons = _s2[1];
       var _s3  = useState(0);          var sc    = _s3[0]; var setSc    = _s3[1];
@@ -130,13 +131,19 @@
       var revDone = useRef(false);
 
       var nChoices = 3 + boons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
+      var shopRerolls = getShopRerolls(boons, gl);
 
       var advance = useCallback(function() {
         if (revDone.current) return;
         revDone.current = true;
         clearTimeout(t2.current);
         var d = spinRef.current;
-        if (d.result === 'win') { setChoices(drawBoons(d.nc, d.gl)); setPhase('boon_select'); }
+        if (d.result === 'win') {
+          var shop = drawBoons(d.nc, d.gl, d.fb);
+          setBoons(shop.boons);
+          setChoices(shop.choices);
+          setPhase('boon_select');
+        }
         else setPhase('game_over');
       }, []);
 
@@ -157,18 +164,24 @@
 
       var spin = useCallback(function() {
         if (phase !== 'idle') return;
-        var layout = buildLayout(tiles, boons, true);
+        var prep = prepareSpin(tiles, boons);
+        var spinTiles = prep.tiles;
+        var spinBoons = prep.boons;
+        setTiles(spinTiles);
+        var layout = buildLayout(spinTiles, spinBoons, true);
         var angles = calcAngles(layout);
         var idx    = pickWeighted(layout);
+        var guard = MAX_DEAD_ZONE_RETRIES;
+        while (layout[idx].type === 'dead' && guard-- > 0) idx = pickWeighted(layout);
         var tc     = angles[idx].center;
         var hs     = (angles[idx].end - angles[idx].start) / 2;
         var cm     = wdeg % 360;
         var delta  = ((LAND - tc - cm) % 360 + 360) % 360;
         var target = wdeg + (5 + Math.floor(Math.random() * 4)) * 360 + delta;
 
-        var result = layout[idx].type, fb = boons;
+        var result = layout[idx].type, fb = spinBoons;
         if (layout[idx].type === 'lose') {
-          var res = tryRescue(boons);
+          var res = tryRescue(spinBoons);
           result = res.ok ? 'win' : 'lose';
           fb = res.boons;
         }
@@ -200,6 +213,14 @@
           setPhase('idle');
         }
       }, [tiles, boons, nid]);
+
+      var rerollChoices = useCallback(function() {
+        if (phase !== 'boon_select') return;
+        var rr = rerollShop(nChoices, gl, boons);
+        if (!rr.ok) return;
+        setBoons(rr.boons);
+        setChoices(rr.choices);
+      }, [phase, nChoices, gl, boons]);
 
       var restart = useCallback(function() {
         [t1, t2, t3].forEach(function(r) { clearTimeout(r.current); });
@@ -268,7 +289,7 @@
                     <path
                       key={t.id}
                       d={slicePath(da[i].start, da[i].end)}
-                      fill={t.type === 'win' ? '#d4d4d4' : '#1e1e1e'}
+                      fill={t.type === 'dead' ? '#3a2f45' : (t.type === 'win' ? '#d4d4d4' : '#1e1e1e')}
                       stroke="#0f0f0f"
                       strokeWidth={1.5}
                     />
@@ -374,6 +395,23 @@
                 }}>
                   <div style={{ textAlign: 'center', fontSize: '.68rem', letterSpacing: '.45em', color: '#383838', marginBottom: '18px' }}>
                     CHOOSE A BOON
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                    <button
+                      onClick={function(e) { e.stopPropagation(); rerollChoices(); }}
+                      disabled={shopRerolls <= 0}
+                      style={{
+                        padding: '8px 16px',
+                        background: 'transparent',
+                        border: '1px solid ' + (shopRerolls > 0 ? '#D4AF37' : '#444'),
+                        color: shopRerolls > 0 ? '#D4AF37' : '#555',
+                        letterSpacing: '.18em',
+                        fontSize: '.62rem',
+                        cursor: shopRerolls > 0 ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      REROLL SHOP ({shopRerolls})
+                    </button>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
                     {choices.map(function(b) {
