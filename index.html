@@ -139,7 +139,7 @@
         clearTimeout(t2.current);
         var d = spinRef.current;
         if (d.result === 'win') {
-          var shop = drawBoons(d.nc, d.gl, d.fb);
+          var shop = drawBoons(d.nc, d.gl, d.fb, { firstShop: d.firstShop });
           setBoons(shop.boons);
           setChoices(shop.choices);
           setPhase('boon_select');
@@ -186,7 +186,7 @@
           fb = res.boons;
         }
 
-        spinRef.current = { targetDeg: target, result: result, fb: fb, nc: nChoices, halfSpan: hs, gl: gl };
+        spinRef.current = { targetDeg: target, result: result, fb: fb, nc: nChoices, halfSpan: hs, gl: gl, firstShop: sc === 0 && boons.length === 0 };
         doneRef.current = false;
         setAnim(true);
         setWdeg(target);
@@ -200,7 +200,7 @@
       }, [phase, finish, advance]);
 
       var pick = useCallback(function(boon) {
-        var res = applyBoon(boon, tiles, boons, nid);
+        var res = applyBoon(boon, tiles, boons, nid, gl);
         setTiles(res.tiles);
         setBoons(res.boons);
         setNid(res.nextId);

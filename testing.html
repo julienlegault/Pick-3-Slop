@@ -149,7 +149,7 @@
     }, {});
     // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
     var FRAME_TIME_BUDGET_MILLISECONDS = 25;
-    var SIMULATION_MAX_SPINS_PER_RUN = 40;
+    var SIMULATION_MAX_SPINS_PER_RUN = 75;
     var MAX_DEAD_ZONE_RETRIES = 5;
 
     function formatBoonRange(rg) {
@@ -243,13 +243,13 @@
         }
         if (result === 'lose') break;
 
-        var shop = drawBoons(nChoices, gl, boons);
+        var shop = drawBoons(nChoices, gl, boons, { firstShop: sc === 1 && boons.length === 0 });
         var choices = shop.choices;
         boons = shop.boons;
         if (!choices.length) break;
 
         var picked = chooseByPriority(choices, prioMap);
-        var applied = applyBoon(picked.boon, tiles, boons, nid);
+        var applied = applyBoon(picked.boon, tiles, boons, nid, gl);
         tiles = applied.tiles;
         boons = applied.boons;
         nid = applied.nextId;

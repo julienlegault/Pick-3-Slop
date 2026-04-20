@@ -4,10 +4,10 @@
   var RARITY_ORDER = ['common', 'uncommon', 'rare', 'legendary'];
   var RARITY_RANK = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
   var RARITY_SCALE = {
-    common:    [0.9, 0.8, 0.7, 0.6, 0.4],
-    uncommon:  [0.05, 0.22, 0.55, 1.1, 1.6],
-    rare:      [0.001, 0.05, 0.32, 1.0, 2.2],
-    legendary: [0.0002, 0.01, 0.12, 0.55, 1.6],
+    common:    [0.9, 0.76, 0.64, 0.53, 0.36],
+    uncommon:  [0.05, 0.26, 0.62, 1.2, 1.75],
+    rare:      [0.001, 0.065, 0.38, 1.12, 2.35],
+    legendary: [0.0002, 0.014, 0.15, 0.64, 1.78],
   };
   var FLAT_BONUS_STACK_TO_COUNT = 100;
   var FLAT_BONUS_STACK_TO_SIZE = 2;
@@ -491,6 +491,19 @@
     return 'legendary';
   }
 
+  function pickUncommonOrBetter(weightMap) {
+    var pool = ['uncommon', 'rare', 'legendary'];
+    var total = pool.reduce(function(s, r) { return s + (weightMap[r] || 0); }, 0);
+    if (total <= 0) return 'uncommon';
+    var rr = Math.random() * total;
+    for (var i = 0; i < pool.length; i++) {
+      var r = pool[i];
+      rr -= weightMap[r] || 0;
+      if (rr <= 0) return r;
+    }
+    return 'legendary';
+  }
+
   function consumeNextShopFlags(boons) {
     var nb = boons.map(function(b) { return Object.assign({}, b); });
     var forcedRarity = null;
@@ -517,12 +530,14 @@
     return { boons: nb, forcedRarity: forcedRarity, forcedGroup: forcedGroup };
   }
 
-  function drawBoons(count, gl, boons) {
+  function drawBoons(count, gl, boons, options) {
     var owned = boons || [];
+    var opts = options || {};
     var consumed = consumeNextShopFlags(owned);
     var nb = consumed.boons;
     var forcedRarity = consumed.forcedRarity;
     var forcedGroup = consumed.forcedGroup;
+    var firstShopGuarantee = opts.firstShop === true;
 
     var rarityW = computeRarityWeights(gl, nb);
     var out = [];
@@ -534,6 +549,9 @@
       }
       if (n === 0 && !tpl && forcedRarity) {
         tpl = pickTemplateByRarity(forcedRarity, null);
+      }
+      if (n === 0 && !tpl && firstShopGuarantee) {
+        tpl = pickTemplateByRarity(pickUncommonOrBetter(rarityW), null);
       }
       if (!tpl) {
         var pr = pickRarity(rarityW);
@@ -781,7 +799,32 @@
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  function applyBoon(boon, tiles, boons, nid) {
+  function growthWinRatio(growthCount) {
+    if (growthCount < 3) return 2 / 3;
+    if (growthCount < 5) return 5 / 9;
+    var reduced = (5 / 9) - ((growthCount - 4) * (1 / 18));
+    return clamp(reduced, 1 / 3, 5 / 9);
+  }
+
+  function buildGrowthTiles(size, winRatio, startId) {
+    var winCount = Math.round(size * winRatio);
+    winCount = Math.max(1, Math.min(size - 1, winCount));
+    var out = [];
+    var acc = 0;
+    var nextId = startId;
+    for (var i = 0; i < size; i++) {
+      acc += winCount;
+      var isWin = false;
+      if (acc >= size) {
+        acc -= size;
+        isWin = true;
+      }
+      out.push({ id: nextId++, type: isWin ? 'win' : 'lose' });
+    }
+    return { tiles: out, nextId: nextId };
+  }
+
+  function applyBoon(boon, tiles, boons, nid, growthCount) {
     var t2 = tiles.slice();
     var picked = Object.assign({}, boon, { iid: boon.iid || makeIid(boon.id) });
     if (picked.randomValue && picked.flatBonus === undefined) picked.flatBonus = 0;
@@ -833,8 +876,10 @@
     var grew = t2.every(function(t) { return t.type === 'win'; });
     if (grew) {
       var n = t2.length;
-      t2 = [];
-      for (var j = 0; j < n * 3; j++) t2.push({ id: id++, type: j % 3 === 2 ? 'lose' : 'win' });
+      var ratio = growthWinRatio(Number.isFinite(growthCount) ? growthCount : 0);
+      var grown = buildGrowthTiles(n * 3, ratio, id);
+      t2 = grown.tiles;
+      id = grown.nextId;
 
       var bonusWins = 0;
       b2.forEach(function(b) { if (b.effect === 'growth_bonus_win') bonusWins += boonNumeric(b, 'amount'); });
