@@ -157,6 +157,7 @@
       var _s14 = useState(false);      var revealFlip = _s14[0]; var setRevealFlip = _s14[1];
       var _s15 = useState(null);       var dragIid = _s15[0]; var setDragIid = _s15[1];
       var _s16 = useState(null);       var dragOverIid = _s16[0]; var setDragOverIid = _s16[1];
+      var _s17 = useState(0);          var nonCommonPickStreak = _s17[0]; var setNonCommonPickStreak = _s17[1];
 
       var spinRef = useRef(null);
       var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null), t4 = useRef([]);
@@ -172,7 +173,10 @@
         clearTimeout(t2.current);
         var d = spinRef.current;
         if (d.result === 'win') {
-          var shop = drawBoons(d.nc, d.gl, d.fb, { firstShop: d.shopsSeen === 0 });
+          var shop = drawBoons(d.nc, d.gl, d.fb, {
+            firstShop: d.shopsSeen === 0,
+            nonCommonPickStreak: d.nonCommonPickStreak,
+          });
           setBoons(shop.boons);
           setChoices(shop.choices);
           setShopsSeen(function(n) { return n + 1; });
@@ -249,13 +253,17 @@
           triggered = res.triggered || [];
         }
 
-        spinRef.current = { targetDeg: target, result: result, baseType: landed, triggered: triggered, fb: fb, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen };
+        spinRef.current = {
+          targetDeg: target, result: result, baseType: landed, triggered: triggered,
+          fb: fb, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen,
+          nonCommonPickStreak: nonCommonPickStreak
+        };
         doneRef.current = false;
         setAnim(true);
         setWdeg(target);
         setPhase('spinning');
         t1.current = setTimeout(finish, 3500);
-      }, [phase, tiles, boons, wdeg, nChoices, gl, shopsSeen, finish]);
+      }, [phase, tiles, boons, wdeg, nChoices, gl, shopsSeen, nonCommonPickStreak, finish]);
 
       var handleClick = useCallback(function() {
         if (phase === 'spinning') finish();
@@ -287,15 +295,18 @@
         } else {
           setPhase('idle');
         }
+        setNonCommonPickStreak(function(streak) {
+          return boon.rarity === 'common' ? 0 : (streak + 1);
+        });
       }, [tiles, boons, nid]);
 
       var rerollChoices = useCallback(function() {
         if (phase !== 'boon_select') return;
-        var rr = rerollShop(nChoices, gl, boons);
+        var rr = rerollShop(nChoices, gl, boons, { nonCommonPickStreak: nonCommonPickStreak });
         if (!rr.ok) return;
         setBoons(rr.boons);
         setChoices(rr.choices);
-      }, [phase, nChoices, gl, boons]);
+      }, [phase, nChoices, gl, boons, nonCommonPickStreak]);
 
       var restart = useCallback(function() {
         [t1, t2, t3].forEach(function(r) { clearTimeout(r.current); });
@@ -309,7 +320,7 @@
         setWdeg(0); setAnim(false); setRtile(null);
         setFlippedTiles([]); setShakingBoon(null); setRevealFlip(false);
         setDragIid(null); setDragOverIid(null);
-        setChoices([]); setNid(6); setShopsSeen(0);
+        setChoices([]); setNid(6); setShopsSeen(0); setNonCommonPickStreak(0);
       }, []);
 
       var shownBoons = boons.filter(function(b) { return b.effect !== 'add_win'; });
