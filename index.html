@@ -168,7 +168,7 @@
       if (rarityTotal <= 0) return [];
 
       var out = [];
-      var rollStamp = Date.now();
+      var shopStamp = Date.now();
       for (var n = 0; n < count; n++) {
         var rr = Math.random() * rarityTotal;
         var pickedRarity = rarityOrder[rarityOrder.length - 1];
@@ -192,7 +192,7 @@
           }
         }
 
-        out.push(Object.assign({}, chosen, { iid: chosen.id + '_' + rollStamp + '_' + n + '_' + Math.random().toString(36).slice(2, 8) }));
+        out.push(Object.assign({}, chosen, { iid: chosen.id + '_' + shopStamp + '_' + n + '_' + Math.random().toString(36).slice(2, 8) }));
       }
       return out;
     }
