@@ -106,8 +106,8 @@
         <ul id="boonList"></ul>
       </div>
       <div class="panel">
-        <div class="sub">Scatter plot: x = spins survived, y = average boon number</div>
-        <canvas id="plot" width="900" height="560" role="img" aria-label="Scatter plot of simulation runs with spins survived on the horizontal axis and average boon number on the vertical axis"></canvas>
+        <div class="sub">Average curve: x = spins survived, y = average boon number</div>
+        <canvas id="plot" width="900" height="560" role="img" aria-label="Average curve of simulation runs with spins survived on the horizontal axis and average boon number on the vertical axis"></canvas>
         <div id="status" role="status" aria-live="polite"></div>
       </div>
     </div>
@@ -116,7 +116,14 @@
   <script src="./pick3-logic.js"></script>
   <script>
     var BASE_BOONS = window.Pick3Logic.BOONS;
-    var orderedBoons = BASE_BOONS.slice();
+    var RARITY_RANK = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
+    var orderedBoons = BASE_BOONS.slice().sort(function(a, b) {
+      var rarityDiff = (RARITY_RANK[b.rarity] || 0) - (RARITY_RANK[a.rarity] || 0);
+      if (rarityDiff !== 0) return rarityDiff;
+      var weightDiff = (a.w || 0) - (b.w || 0);
+      if (weightDiff !== 0) return weightDiff;
+      return a.name.localeCompare(b.name);
+    });
     var INIT_TILES = window.Pick3Logic.INIT_TILES;
     var buildLayout = window.Pick3Logic.buildLayout;
     var pickWeighted = window.Pick3Logic.pickWeighted;
@@ -287,15 +294,35 @@
       ctx.fillText('Average boon number', 0, 0);
       ctx.restore();
 
+      var groupedBySpins = {};
       for (var j = 0; j < data.length; j++) {
         var d = data[j];
-        var dx = ml + (d.spins / xMax) * pw;
-        var dy = h - mb - (Math.min(d.avgBoonNumber, yMax) / yMax) * ph;
-        ctx.fillStyle = 'rgba(212,175,55,0.6)';
-        ctx.beginPath();
-        ctx.arc(dx, dy, 2.1, 0, Math.PI * 2);
-        ctx.fill();
+        if (!groupedBySpins[d.spins]) groupedBySpins[d.spins] = { sum: 0, count: 0 };
+        groupedBySpins[d.spins].sum += d.avgBoonNumber;
+        groupedBySpins[d.spins].count += 1;
       }
+
+      var curvePoints = Object.keys(groupedBySpins)
+        .map(function(spinsKey) {
+          var spins = Number(spinsKey);
+          var group = groupedBySpins[spins];
+          return { spins: spins, avg: group.sum / group.count };
+        })
+        .sort(function(a, b) { return a.spins - b.spins; });
+
+      if (!curvePoints.length) return;
+
+      ctx.strokeStyle = '#D4AF37';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      for (var k = 0; k < curvePoints.length; k++) {
+        var p = curvePoints[k];
+        var cx = ml + (p.spins / xMax) * pw;
+        var cy = h - mb - (Math.min(p.avg, yMax) / yMax) * ph;
+        if (k === 0) ctx.moveTo(cx, cy);
+        else ctx.lineTo(cx, cy);
+      }
+      ctx.stroke();
     }
 
     function runSimulation(totalRuns) {
