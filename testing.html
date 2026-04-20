@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pick 3 Slop - Testing</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -24,7 +25,7 @@
     }
     .controls {
       display: grid;
-      grid-template-columns: 1fr auto auto;
+      grid-template-columns: auto 1fr auto auto;
       gap: 8px;
       align-items: center;
       margin-bottom: 14px;
@@ -38,6 +39,7 @@
       font-size: .95rem;
     }
     button { cursor: pointer; border-color: #D4AF37; color: #D4AF37; }
+    .control-label { color: #b0b0b0; }
     .grid {
       display: grid;
       grid-template-columns: 350px 1fr;
@@ -93,6 +95,7 @@
   <div class="wrap">
     <h1>PICK 3 SLOP — TESTING</h1>
     <div class="controls">
+      <label for="runsInput" class="control-label">Runs</label>
       <input id="runsInput" type="number" min="1" step="1" value="500" />
       <button id="runBtn">Run Simulation</button>
       <a href="./index.html" style="color:#6ea8ff;text-align:right;">Back to game</a>
@@ -104,15 +107,16 @@
       </div>
       <div class="panel">
         <div class="sub">Scatter plot: x = spins survived, y = average boon number</div>
-        <canvas id="plot" width="900" height="560"></canvas>
-        <div id="status"></div>
+        <canvas id="plot" width="900" height="560" role="img" aria-label="Scatter plot of simulation runs with spins survived on the horizontal axis and average boon number on the vertical axis"></canvas>
+        <div id="status" role="status" aria-live="polite"></div>
       </div>
     </div>
   </div>
 
   <script src="./pick3-logic.js"></script>
   <script>
-    var BOONS = window.Pick3Logic.BOONS;
+    var BASE_BOONS = window.Pick3Logic.BOONS;
+    var orderedBoons = BASE_BOONS.slice();
     var INIT_TILES = window.Pick3Logic.INIT_TILES;
     var buildLayout = window.Pick3Logic.buildLayout;
     var pickWeighted = window.Pick3Logic.pickWeighted;
@@ -130,6 +134,13 @@
 
     var dragItem = null;
     var results = [];
+    var boonById = BASE_BOONS.reduce(function(map, boon) {
+      map[boon.id] = boon;
+      return map;
+    }, {});
+    // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
+    var FRAME_TIME_BUDGET_MILLISECONDS = 25;
+    var SIMULATION_SPIN_CAP = 20000;
 
     function cloneTiles() {
       return INIT_TILES.map(function(t) { return { id: t.id, type: t.type }; });
@@ -137,15 +148,15 @@
 
     function renderBoonList() {
       boonList.innerHTML = '';
-      for (var i = 0; i < BOONS.length; i++) {
-        var b = BOONS[i];
+      for (var i = 0; i < orderedBoons.length; i++) {
+        var b = orderedBoons[i];
         var li = document.createElement('li');
         li.draggable = true;
         li.dataset.id = b.id;
         li.innerHTML =
           '<div class="row">' +
             '<strong style="color:' + RC[b.rarity] + '">' + (i + 1) + '. ' + b.name + '</strong>' +
-            '<span style="color:#aaa">value ' + (BOONS.length - i) + '</span>' +
+            '<span style="color:#aaa">value ' + (orderedBoons.length - i) + '</span>' +
           '</div>' +
           '<div class="meta">' + b.rarity + ' · ' + b.desc + '</div>';
         boonList.appendChild(li);
@@ -153,7 +164,7 @@
     }
 
     function getCurrentPriority() {
-      var ids = Array.prototype.map.call(boonList.querySelectorAll('li'), function(li) { return li.dataset.id; });
+      var ids = Array.from(boonList.querySelectorAll('li')).map(function(li) { return li.dataset.id; });
       var map = {};
       for (var i = 0; i < ids.length; i++) {
         map[ids[i]] = ids.length - i;
@@ -182,7 +193,8 @@
       var gl = 0;
       var nid = 6;
       var pickedVals = [];
-      var cap = 20000;
+      // Safety cap prevents a pathological run from looping forever.
+      var cap = SIMULATION_SPIN_CAP;
 
       while (cap-- > 0) {
         sc += 1;
@@ -239,7 +251,7 @@
       if (!data.length) return;
 
       var xMax = Math.max(1, data.reduce(function(m, d) { return Math.max(m, d.spins); }, 0));
-      var yMax = Math.max(1, BOONS.length);
+      var yMax = Math.max(1, BASE_BOONS.length);
       var yStep = 1;
       var xTicks = 8;
 
@@ -295,7 +307,7 @@
 
       function step() {
         var frameStart = performance.now();
-        while (done < totalRuns && performance.now() - frameStart < 25) {
+        while (done < totalRuns && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
           results.push(runSingle(prioMap));
           done += 1;
         }
@@ -325,19 +337,16 @@
       var li = e.target.closest('li');
       if (li) li.classList.remove('dragging');
       dragItem = null;
-      BOONS = Array.prototype.map.call(boonList.querySelectorAll('li'), function(node) {
+      orderedBoons = Array.from(boonList.querySelectorAll('li')).map(function(node) {
         var id = node.dataset.id;
-        for (var i = 0; i < window.Pick3Logic.BOONS.length; i++) {
-          if (window.Pick3Logic.BOONS[i].id === id) return window.Pick3Logic.BOONS[i];
-        }
-        return null;
+        return boonById[id] || null;
       }).filter(Boolean);
       renderBoonList();
     });
     boonList.addEventListener('dragover', function(e) {
       e.preventDefault();
       if (!dragItem) return;
-      var rows = Array.prototype.slice.call(boonList.querySelectorAll('li:not(.dragging)'));
+      var rows = Array.from(boonList.querySelectorAll('li:not(.dragging)'));
       var next = null;
       for (var i = 0; i < rows.length; i++) {
         var box = rows[i].getBoundingClientRect();
