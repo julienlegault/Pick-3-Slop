@@ -89,6 +89,17 @@
     function(_, v) { return 'On a loss: ' + pct(v.chance) + '% chance to win instead. Copies trigger separately.'; }
   ));
 
+  BOONS.push(boonTemplate({
+    id: 'add_win_common',
+    group: 'add_win',
+    name: 'Flip a Lose to Win',
+    rarity: 'common',
+    w: 30,
+    effect: 'add_win',
+    amount: 1,
+    desc: 'Immediately flip one lose tile to win.'
+  }));
+
   addMany(numericBoon(
     'rescue_additive',
     'Stacked Salvation',
@@ -389,8 +400,8 @@
   var RC = { common:'#909090', uncommon:'#4a9eff', rare:'#c060ff', legendary:'#D4AF37' };
   var INIT_TILES = [
     { id:0, type:'win'  }, { id:1, type:'lose' },
-    { id:2, type:'win'  }, { id:3, type:'lose' },
-    { id:4, type:'win'  }, { id:5, type:'lose' },
+    { id:2, type:'win'  }, { id:3, type:'win'  },
+    { id:4, type:'lose' }, { id:5, type:'win'  },
   ];
 
   function cloneBoon(b) { return Object.assign({}, b, { iid: makeIid(b.id) }); }
@@ -818,7 +829,7 @@
     if (grew) {
       var n = t2.length;
       t2 = [];
-      for (var j = 0; j < n * 3; j++) t2.push({ id: id++, type: j % 3 === 0 ? 'win' : 'lose' });
+      for (var j = 0; j < n * 3; j++) t2.push({ id: id++, type: j % 3 === 2 ? 'lose' : 'win' });
 
       var bonusWins = 0;
       b2.forEach(function(b) { if (b.effect === 'growth_bonus_win') bonusWins += boonNumeric(b, 'amount'); });
