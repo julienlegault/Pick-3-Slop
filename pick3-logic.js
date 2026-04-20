@@ -14,6 +14,7 @@
   var MIN_STACKABLE_COUNT = 1;
   var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
+  // Tolerance for float comparisons when checking if a clamped scale reached its minimum.
   var ANCHOR_SCALE_EPSILON = 1e-9;
   var MIN_LOSE_TILE_MULT = 0.08;
   var COMMON_CATCHUP_MIN_STREAK = 2;
@@ -669,31 +670,33 @@
 
     if (anchorShrink > 0) {
       anchorShrink = clamp(anchorShrink, 0, 0.95);
-      var expiredAnchorCount = 0;
+      var expiredAnchorTileIdx = [];
+      var anchorBoonIdx = [];
       for (var j = 0; j < t2.length; j++) {
         if (t2[j].type === 'lose' && t2[j].anchored) {
           var nextScale = clamp((t2[j].anchorScale || 1) * (1 - anchorShrink), MIN_ANCHOR_SCALE, 1);
           t2[j].anchorScale = nextScale;
           if (nextScale <= MIN_ANCHOR_SCALE + ANCHOR_SCALE_EPSILON) {
-            var unlocked = Object.assign({}, t2[j]);
-            delete unlocked.anchored;
-            delete unlocked.anchorScale;
-            t2[j] = unlocked;
-            expiredAnchorCount += 1;
+            expiredAnchorTileIdx.push(j);
           }
         }
       }
-      while (expiredAnchorCount > 0) {
-        var removed = false;
-        for (var k = 0; k < b2.length; k++) {
-          if (b2[k].effect === 'anchor_lose') {
-            b2.splice(k, 1);
-            removed = true;
-            break;
-          }
+      for (var k = 0; k < b2.length; k++) {
+        if (b2[k].effect === 'anchor_lose') anchorBoonIdx.push(k);
+      }
+      var pairCount = Math.min(expiredAnchorTileIdx.length, anchorBoonIdx.length);
+      for (var ei = 0; ei < pairCount; ei++) {
+        var ti = expiredAnchorTileIdx[ei];
+        var unlocked = Object.assign({}, t2[ti]);
+        delete unlocked.anchored;
+        delete unlocked.anchorScale;
+        t2[ti] = unlocked;
+      }
+      for (var bi = pairCount - 1; bi >= 0; bi--) {
+        var removeAt = anchorBoonIdx[bi];
+        if (removeAt >= 0 && removeAt < b2.length) {
+          b2.splice(removeAt, 1);
         }
-        if (!removed) break;
-        expiredAnchorCount -= 1;
       }
     }
 
