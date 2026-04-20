@@ -4,10 +4,10 @@
   var RARITY_ORDER = ['common', 'uncommon', 'rare', 'legendary'];
   var RARITY_RANK = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
   var RARITY_SCALE = {
-    common:    [0.9, 0.8, 0.7, 0.6, 0.4],
-    uncommon:  [0.05, 0.22, 0.55, 1.1, 1.6],
-    rare:      [0.001, 0.05, 0.32, 1.0, 2.2],
-    legendary: [0.0002, 0.01, 0.12, 0.55, 1.6],
+    common:    [0.9, 0.76, 0.64, 0.53, 0.36],
+    uncommon:  [0.05, 0.26, 0.62, 1.2, 1.75],
+    rare:      [0.001, 0.065, 0.38, 1.12, 2.35],
+    legendary: [0.0002, 0.014, 0.15, 0.64, 1.78],
   };
   var FLAT_BONUS_STACK_TO_COUNT = 100;
   var FLAT_BONUS_STACK_TO_SIZE = 2;
@@ -15,6 +15,15 @@
   var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
   var MIN_LOSE_TILE_MULT = 0.08;
+  // Wheel-growth difficulty curve: early wheels are forgiving, then trend harder over time.
+  var WHEEL_GROWTH_MULTIPLIER = 3;
+  var EARLY_GROWTH_LEVEL_LIMIT = 3;
+  var MID_GROWTH_LEVEL_LIMIT = 5;
+  var MID_GROWTH_DECAY_START_LEVEL = MID_GROWTH_LEVEL_LIMIT - 1;
+  var EARLY_GROWTH_WIN_RATIO = 2 / 3;
+  var MID_GROWTH_WIN_RATIO = 5 / 9;
+  var MIN_GROWTH_WIN_RATIO = 1 / 3;
+  var GROWTH_WIN_RATIO_STEP = 1 / 18;
 
   function rarityMult(rarity, gl) {
     var arr = RARITY_SCALE[rarity] || [1];
@@ -491,6 +500,19 @@
     return 'legendary';
   }
 
+  function pickUncommonOrBetter(weightMap) {
+    var pool = ['uncommon', 'rare', 'legendary'];
+    var total = pool.reduce(function(s, r) { return s + (weightMap[r] || 0); }, 0);
+    if (total <= 0) return 'uncommon';
+    var rr = Math.random() * total;
+    for (var i = 0; i < pool.length; i++) {
+      var r = pool[i];
+      rr -= weightMap[r] || 0;
+      if (rr <= 0) return r;
+    }
+    return 'legendary';
+  }
+
   function consumeNextShopFlags(boons) {
     var nb = boons.map(function(b) { return Object.assign({}, b); });
     var forcedRarity = null;
@@ -517,12 +539,14 @@
     return { boons: nb, forcedRarity: forcedRarity, forcedGroup: forcedGroup };
   }
 
-  function drawBoons(count, gl, boons) {
+  function drawBoons(count, gl, boons, options) {
     var owned = boons || [];
+    var opts = options || {};
     var consumed = consumeNextShopFlags(owned);
     var nb = consumed.boons;
     var forcedRarity = consumed.forcedRarity;
     var forcedGroup = consumed.forcedGroup;
+    var firstShopGuarantee = opts.firstShop === true;
 
     var rarityW = computeRarityWeights(gl, nb);
     var out = [];
@@ -534,6 +558,9 @@
       }
       if (n === 0 && !tpl && forcedRarity) {
         tpl = pickTemplateByRarity(forcedRarity, null);
+      }
+      if (n === 0 && !tpl && firstShopGuarantee) {
+        tpl = pickTemplateByRarity(pickUncommonOrBetter(rarityW), null);
       }
       if (!tpl) {
         var pr = pickRarity(rarityW);
@@ -781,6 +808,43 @@
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
+  function growthWinRatio(growthLevel) {
+    // First growth bands keep stronger win density (2/3 then ~5/9), then decay toward 1/3 floor.
+    if (growthLevel < EARLY_GROWTH_LEVEL_LIMIT) return EARLY_GROWTH_WIN_RATIO;
+    if (growthLevel < MID_GROWTH_LEVEL_LIMIT) return MID_GROWTH_WIN_RATIO;
+    var reduced = MID_GROWTH_WIN_RATIO - ((growthLevel - MID_GROWTH_DECAY_START_LEVEL) * GROWTH_WIN_RATIO_STEP);
+    return clamp(reduced, MIN_GROWTH_WIN_RATIO, MID_GROWTH_WIN_RATIO);
+  }
+
+  function buildGrowthTiles(size, winRatio, startId) {
+    var winCount = Math.round(size * winRatio);
+    winCount = Math.max(1, Math.min(size - 1, winCount));
+    var out = [];
+    var acc = 0;
+    var nextId = startId;
+    for (var i = 0; i < size; i++) {
+      acc += winCount;
+      var isWin = false;
+      if (acc >= size) {
+        acc -= size;
+        isWin = true;
+      }
+      out.push({ id: nextId++, type: isWin ? 'win' : 'lose' });
+    }
+    return { tiles: out, nextId: nextId };
+  }
+
+  function inferGrowthLevelFromTileCount(tileCount) {
+    // Reconstruct prior growth count directly from wheel size progression (base size * 3^n).
+    var level = 0;
+    var size = INIT_TILES.length;
+    while (size < tileCount) {
+      size *= WHEEL_GROWTH_MULTIPLIER;
+      level += 1;
+    }
+    return level;
+  }
+
   function applyBoon(boon, tiles, boons, nid) {
     var t2 = tiles.slice();
     var picked = Object.assign({}, boon, { iid: boon.iid || makeIid(boon.id) });
@@ -833,8 +897,11 @@
     var grew = t2.every(function(t) { return t.type === 'win'; });
     if (grew) {
       var n = t2.length;
-      t2 = [];
-      for (var j = 0; j < n * 3; j++) t2.push({ id: id++, type: j % 3 === 2 ? 'lose' : 'win' });
+      var priorGrowthLevel = inferGrowthLevelFromTileCount(n);
+      var ratio = growthWinRatio(priorGrowthLevel);
+      var grown = buildGrowthTiles(n * WHEEL_GROWTH_MULTIPLIER, ratio, id);
+      t2 = grown.tiles;
+      id = grown.nextId;
 
       var bonusWins = 0;
       b2.forEach(function(b) { if (b.effect === 'growth_bonus_win') bonusWins += boonNumeric(b, 'amount'); });
