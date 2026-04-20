@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pick 3 Slop</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { min-height: 100vh; background: #0f0f0f; }
+    #root { min-height: 100vh; }
+
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
+
+    @keyframes fu        { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes zr        { 0%{transform:scale(.15);opacity:0;} 65%{transform:scale(1.07);opacity:1;} 100%{transform:scale(1);opacity:1;} }
+    @keyframes blink     { 0%,100%{opacity:.22;} 50%{opacity:.82;} }
+    @keyframes overlayIn { from{opacity:0;} to{opacity:1;} }
+    @keyframes growPulse { 0%,100%{box-shadow:0 0 18px rgba(212,175,55,.22);} 50%{box-shadow:0 0 52px rgba(212,175,55,.72),0 0 90px rgba(212,175,55,.2);} }
+    @keyframes tileReveal {
+      0%   { transform: translateX(95px) scale(.26); opacity: 0; }
+      62%  { transform: translateX(-5px) scale(1.05); opacity: 1; }
+      100% { transform: translateX(0) scale(1); opacity: 1; }
+    }
+
+    .spin-btn:hover   { background: rgba(212,175,55,.1) !important; box-shadow: 0 0 26px rgba(212,175,55,.3) !important; }
+    .again-btn:hover  { background: rgba(212,175,55,.1) !important; }
+    .boon-card        { transition: transform .15s, box-shadow .15s !important; }
+    .boon-card:hover  { transform: translateY(-4px) !important; }
+    .boon-tag         { position: relative; display: inline-block; }
+    .boon-tip         {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 190px;
+      padding: 10px 13px;
+      border-radius: 4px;
+      background: #1a1a1a;
+      z-index: 9999;
+      pointer-events: none;
+      box-shadow: 0 4px 24px rgba(0,0,0,.8);
+    }
+    .boon-tag:hover .boon-tip,
+    .boon-tag.pinned .boon-tip { display: block; }
+    .tip-arrow {
+      position: absolute;
+      bottom: -7px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useCallback } = React;
+
+    const CX = 210, CY = 210, R = 175;
+    const LAND = 90;
+
+    // Rarity weight multipliers per growth level (index = growthLevel, capped at last)
+    const RARITY_SCALE = {
+      common:    [8.0, 4.0, 2.0, 1.2, 1.0],
+      uncommon:  [1.0, 1.4, 1.9, 2.4, 2.8],
+      rare:      [0.08, 0.35, 0.9, 1.8, 2.8],
+      legendary: [0.03, 0.15, 0.5, 1.1, 1.8],
+    };
+    function rarityMult(rarity, gl) {
+      const arr = RARITY_SCALE[rarity] || [1];
+      return arr[Math.min(gl, arr.length - 1)];
+    }
+
+    const BOONS = [
+      { id:'w1', name:'Fortune Sliver',     rarity:'common',    w:40, desc:'Add 1 win tile to the wheel.',                                                        effect:'add_win',     amount:1 },
+      { id:'wg', name:'Gilded Fortune',     rarity:'uncommon',  w:6,  desc:'Win tiles are 30% larger. Stacks multiplicatively.',                                   effect:'win_grow',    mult:1.3 },
+      { id:'ls', name:'Diminished Doom',    rarity:'uncommon',  w:6,  desc:'Lose tiles are 30% smaller. Stacks multiplicatively.',                                 effect:'lose_shrink', mult:0.7 },
+      { id:'tw', name:'Phantom Tile',       rarity:'uncommon',  w:6,  desc:'Each spin: +1 temporary win tile (does not count toward wheel growth).',               effect:'temp_win',    amount:1 },
+      { id:'lb', name:'Lucky Break',        rarity:'uncommon',  w:5,  desc:'On a loss: 25% chance to win. Copies add +25% additively, capped at 80%.',             effect:'rescue_add',  chance:0.25 },
+      { id:'w2', name:'Twin Slivers',       rarity:'uncommon',  w:5,  desc:'Add 2 win tiles to the wheel.',                                                        effect:'add_win',     amount:2 },
+      { id:'ga', name:'Guardian Angel',     rarity:'rare',      w:3,  desc:'Next loss becomes a win. One-time use. Each copy is an independent charge.',           effect:'shield',      charges:1 },
+      { id:'wf', name:'Weighted Fate',      rarity:'rare',      w:3,  desc:'On a loss: 40% chance to win instead. Each copy triggers independently.',              effect:'rescue_mul',  chance:0.40 },
+      { id:'sc', name:'Spoiled for Choice', rarity:'rare',      w:2,  desc:'+1 boon choice per shop visit. Stacks.',                                               effect:'extra_choice' },
+      { id:'ft', name:'Fortunes Tide',      rarity:'legendary', w:1,  desc:'Win tiles 60% larger AND lose tiles 60% smaller. Stacks multiplicatively.',            effect:'tide' },
+      { id:'ec', name:'Echo Chamber',       rarity:'legendary', w:1,  desc:'Immediately duplicate a random boon in your collection.',                              effect:'duplicate' },
+      { id:'gf', name:'Gale Fortune',       rarity:'legendary', w:1,  desc:'Immediately add 5 win tiles to the wheel.',                                            effect:'add_win',     amount:5 },
+    ];
+    const TOTAL_W = BOONS.reduce((s, b) => s + b.w, 0);
+    const RC = { common:'#909090', uncommon:'#4a9eff', rare:'#c060ff', legendary:'#D4AF37' };
+
+    // SVG helpers
+    function polar(deg, r) {
+      var rr = r === undefined ? R : r;
+      var rad = (deg - 90) * Math.PI / 180;
+      return { x: CX + rr * Math.cos(rad), y: CY + rr * Math.sin(rad) };
+    }
+    function slicePath(a1, a2) {
+      if (a2 - a1 >= 359.99) {
+        var p = polar(a1);
+        return 'M ' + CX + ',' + CY + ' L ' + p.x + ',' + p.y + ' A ' + R + ',' + R + ' 0 1 1 ' + (p.x - 0.01) + ',' + p.y + ' Z';
+      }
+      var s = polar(a1), e = polar(a2);
+      var lg = a2 - a1 > 180 ? 1 : 0;
+      return 'M ' + CX + ',' + CY + ' L ' + s.x + ',' + s.y + ' A ' + R + ',' + R + ' 0 ' + lg + ' 1 ' + e.x + ',' + e.y + ' Z';
+    }
+    function revealWedge(halfSpan) {
+      var hs = Math.max(12, Math.min(65, halfSpan));
+      var ox = 0, oy = 130, rr = 265;
+      function p(d) {
+        var rad = (d - 90) * Math.PI / 180;
+        return { x: ox + rr * Math.cos(rad), y: oy + rr * Math.sin(rad) };
+      }
+      var s = p(90 - hs), e = p(90 + hs);
+      return 'M ' + ox + ',' + oy + ' L ' + s.x + ',' + s.y + ' A ' + rr + ',' + rr + ' 0 0 1 ' + e.x + ',' + e.y + ' Z';
+    }
+
+    // Game logic
+    function buildLayout(tiles, boons, addTemp) {
+      var wm = 1, lm = 1, tmp = 0;
+      for (var i = 0; i < boons.length; i++) {
+        var b = boons[i];
+        if (b.effect === 'win_grow')   wm *= b.mult;
+        if (b.effect === 'lose_shrink') lm *= b.mult;
+        if (b.effect === 'tide')       { wm *= 1.6; lm *= 0.4; }
+        if (b.effect === 'temp_win' && addTemp) tmp += b.amount;
+      }
+      var result = tiles.map(function(t) { return Object.assign({}, t, { sz: t.type === 'win' ? wm : lm }); });
+      for (var j = 0; j < tmp; j++) result.push({ id: '_t' + j, type: 'win', sz: wm, temp: true });
+      return result;
+    }
+    function calcAngles(layout) {
+      var total = layout.reduce(function(s, t) { return s + t.sz; }, 0);
+      var cum = 0;
+      return layout.map(function(t) {
+        var span = (t.sz / total) * 360;
+        var start = cum; cum += span;
+        return { start: start, end: cum, center: start + span / 2 };
+      });
+    }
+    function pickWeighted(layout) {
+      var tot = layout.reduce(function(s, t) { return s + t.sz; }, 0);
+      var r = Math.random() * tot;
+      for (var i = 0; i < layout.length; i++) { r -= layout[i].sz; if (r <= 0) return i; }
+      return layout.length - 1;
+    }
+    function drawBoons(count, gl) {
+      var scaledW = BOONS.map(function(b) { return b.w * rarityMult(b.rarity, gl); });
+      var total = scaledW.reduce(function(s, w) { return s + w; }, 0);
+      var out = [], used = {};
+      for (var tries = 0; tries < 600 && out.length < count; tries++) {
+        var r = Math.random() * total;
+        for (var i = 0; i < BOONS.length; i++) {
+          r -= scaledW[i];
+          if (r <= 0) {
+            if (!used[i]) {
+              used[i] = true;
+              out.push(Object.assign({}, BOONS[i], { iid: BOONS[i].id + '_' + Date.now() + '_' + out.length }));
+            }
+            break;
+          }
+        }
+      }
+      return out;
+    }
+    function tryRescue(boons) {
+      var nb = boons.map(function(b) { return Object.assign({}, b); });
+      for (var i = 0; i < nb.length; i++) {
+        if (nb[i].effect === 'shield' && nb[i].charges > 0) {
+          nb[i] = Object.assign({}, nb[i], { charges: nb[i].charges - 1 });
+          return { ok: true, boons: nb };
+        }
+      }
+      var addP = 0;
+      nb.forEach(function(b) { if (b.effect === 'rescue_add') addP += b.chance; });
+      if (addP > 0 && Math.random() < Math.min(addP, 0.8)) return { ok: true, boons: nb };
+      for (var j = 0; j < nb.length; j++) {
+        if (nb[j].effect === 'rescue_mul' && Math.random() < nb[j].chance) return { ok: true, boons: nb };
+      }
+      return { ok: false, boons: nb };
+    }
+    function applyBoon(boon, tiles, boons, nid) {
+      var t2 = tiles.slice();
+      var b2 = boons.concat([Object.assign({}, boon)]);
+      var id = nid;
+      if (boon.effect === 'add_win') {
+        for (var i = 0; i < boon.amount; i++) t2.push({ id: id++, type: 'win' });
+      }
+      if (boon.effect === 'duplicate' && boons.length > 0) {
+        var src = boons[Math.floor(Math.random() * boons.length)];
+        b2.push(Object.assign({}, src, { iid: 'dup_' + Date.now() }));
+      }
+      var grew = t2.every(function(t) { return t.type === 'win'; });
+      if (grew) {
+        var n = t2.length;
+        t2 = [];
+        for (var j = 0; j < n * 3; j++) t2.push({ id: id++, type: j % 3 === 0 ? 'win' : 'lose' });
+      }
+      return { tiles: t2, boons: b2, nextId: id, grew: grew };
+    }
+
+    // BoonTag — tooltip via CSS class toggle + hover, no portal
+    function BoonTag(props) {
+      var b = props.b;
+      var large = props.large;
+      var [pinned, setPinned] = useState(false);
+      var c = RC[b.rarity];
+      var sz = large
+        ? { padding: '4px 11px', fontSize: '.7rem' }
+        : { padding: '3px 8px',  fontSize: '.62rem' };
+
+      return (
+        <span
+          className={'boon-tag' + (pinned ? ' pinned' : '')}
+          onClick={function(e) { e.stopPropagation(); setPinned(function(p) { return !p; }); }}
+          style={Object.assign({}, sz, {
+            border: '1px solid ' + c,
+            borderRadius: '2px',
+            color: c,
+            background: pinned ? c + '28' : c + '14',
+            cursor: 'pointer',
+            transition: 'background .12s',
+            fontFamily: "'Cinzel', serif",
+          })}
+        >
+          {b.name}{b.effect === 'shield' && b.charges > 0 ? ' (' + b.charges + ')' : ''}
+          <span
+            className="boon-tip"
+            style={{ border: '1px solid ' + c, boxShadow: '0 4px 24px rgba(0,0,0,.8), 0 0 12px ' + c + '30' }}
+          >
+            <span style={{ display:'block', fontSize:'.58rem', color:c, letterSpacing:'.3em', textTransform:'uppercase', marginBottom:'5px', fontFamily:"'Cinzel',serif" }}>
+              {b.rarity}
+            </span>
+            <span style={{ display:'block', fontSize:'.82rem', color:'#e0e0e0', fontFamily:"'Cinzel',serif", fontWeight:600, marginBottom:'6px', lineHeight:1.25 }}>
+              {b.name}
+            </span>
+            <span style={{ display:'block', fontSize:'.7rem', color:'#888', lineHeight:1.5, fontFamily:'Georgia,serif' }}>
+              {b.desc}
+            </span>
+            <span className="tip-arrow" style={{ borderTop: '7px solid ' + c }} />
+          </span>
+        </span>
+      );
+    }
+
+    const INIT_TILES = [
+      { id:0, type:'win'  }, { id:1, type:'lose' },
+      { id:2, type:'win'  }, { id:3, type:'lose' },
+      { id:4, type:'win'  }, { id:5, type:'lose' },
+    ];
+
+    function App() {
+      var _s1  = useState(INIT_TILES); var tiles = _s1[0]; var setTiles = _s1[1];
+      var _s2  = useState([]);         var boons = _s2[0]; var setBoons = _s2[1];
+      var _s3  = useState(0);          var sc    = _s3[0]; var setSc    = _s3[1];
+      var _s4  = useState(0);          var gl    = _s4[0]; var setGl    = _s4[1];
+      var _s5  = useState('idle');     var phase = _s5[0]; var setPhase = _s5[1];
+      var _s6  = useState(0);          var wdeg  = _s6[0]; var setWdeg  = _s6[1];
+      var _s7  = useState(false);      var anim  = _s7[0]; var setAnim  = _s7[1];
+      var _s8  = useState(null);       var rtile = _s8[0]; var setRtile = _s8[1];
+      var _s9  = useState([]);         var choices = _s9[0]; var setChoices = _s9[1];
+      var _s10 = useState(6);          var nid   = _s10[0]; var setNid   = _s10[1];
+
+      var spinRef = useRef(null);
+      var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null);
+      var doneRef = useRef(false);
+      var revDone = useRef(false);
+
+      var nChoices = 3 + boons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
+
+      var advance = useCallback(function() {
+        if (revDone.current) return;
+        revDone.current = true;
+        clearTimeout(t2.current);
+        var d = spinRef.current;
+        if (d.result === 'win') { setChoices(drawBoons(d.nc, d.gl)); setPhase('boon_select'); }
+        else setPhase('game_over');
+      }, []);
+
+      var finish = useCallback(function() {
+        if (doneRef.current) return;
+        doneRef.current = true;
+        clearTimeout(t1.current);
+        var d = spinRef.current;
+        setAnim(false);
+        setWdeg(d.targetDeg);
+        setBoons(d.fb);
+        setRtile({ type: d.result, halfSpan: d.halfSpan });
+        setPhase('reveal');
+        setSc(function(n) { return n + 1; });
+        revDone.current = false;
+        t2.current = setTimeout(advance, 720);
+      }, [advance]);
+
+      var spin = useCallback(function() {
+        if (phase !== 'idle') return;
+        var layout = buildLayout(tiles, boons, true);
+        var angles = calcAngles(layout);
+        var idx    = pickWeighted(layout);
+        var tc     = angles[idx].center;
+        var hs     = (angles[idx].end - angles[idx].start) / 2;
+        var cm     = wdeg % 360;
+        var delta  = ((LAND - tc - cm) % 360 + 360) % 360;
+        var target = wdeg + (5 + Math.floor(Math.random() * 4)) * 360 + delta;
+
+        var result = layout[idx].type, fb = boons;
+        if (layout[idx].type === 'lose') {
+          var res = tryRescue(boons);
+          result = res.ok ? 'win' : 'lose';
+          fb = res.boons;
+        }
+
+        spinRef.current = { targetDeg: target, result: result, fb: fb, nc: nChoices, halfSpan: hs, gl: gl };
+        doneRef.current = false;
+        setAnim(true);
+        setWdeg(target);
+        setPhase('spinning');
+        t1.current = setTimeout(finish, 3500);
+      }, [phase, tiles, boons, wdeg, nChoices, gl, finish]);
+
+      var handleClick = useCallback(function() {
+        if (phase === 'spinning') finish();
+        else if (phase === 'reveal') advance();
+      }, [phase, finish, advance]);
+
+      var pick = useCallback(function(boon) {
+        var res = applyBoon(boon, tiles, boons, nid);
+        setTiles(res.tiles);
+        setBoons(res.boons);
+        setNid(res.nextId);
+        setChoices([]);
+        if (res.grew) {
+          setGl(function(g) { return g + 1; });
+          setPhase('growing');
+          t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
+        } else {
+          setPhase('idle');
+        }
+      }, [tiles, boons, nid]);
+
+      var restart = useCallback(function() {
+        [t1, t2, t3].forEach(function(r) { clearTimeout(r.current); });
+        doneRef.current = true;
+        revDone.current = true;
+        spinRef.current = null;
+        setTiles(INIT_TILES);
+        setBoons([]); setSc(0); setGl(0); setPhase('idle');
+        setWdeg(0); setAnim(false); setRtile(null);
+        setChoices([]); setNid(6);
+      }, []);
+
+      var dl   = buildLayout(tiles, boons, false);
+      var da   = calcAngles(dl);
+      var wins = tiles.filter(function(t) { return t.type === 'win'; }).length;
+      var isOverlay = phase === 'boon_select' || phase === 'game_over';
+
+      return (
+        <div
+          style={{
+            minHeight: '100vh', background: '#0f0f0f', color: '#e0e0e0',
+            fontFamily: "'Cinzel', serif",
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            padding: '24px 16px 60px',
+            cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default',
+            userSelect: 'none',
+          }}
+          onClick={handleClick}
+        >
+          {/* Blurable main content */}
+          <div style={{
+            width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center',
+            filter: isOverlay ? 'blur(6px)' : 'none',
+            transition: 'filter .35s',
+            pointerEvents: isOverlay ? 'none' : 'auto',
+          }}>
+            <h1 style={{
+              fontSize: 'clamp(1.4rem, 4vw, 2rem)', letterSpacing: '.32em',
+              color: '#D4AF37', margin: '0 0 4px', fontWeight: 700,
+              textShadow: '0 0 24px rgba(212,175,55,.22)',
+            }}>PICK 3 SLOP</h1>
+            <div style={{ fontFamily: 'monospace', fontSize: '.78rem', color: '#2c2c2c', letterSpacing: '.35em', marginBottom: '18px' }}>
+              SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
+            </div>
+
+            {/* Wheel */}
+            <div style={{ position: 'relative', width: 435, height: 420 }}>
+              {/* Right-side pointer */}
+              <div style={{
+                position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)',
+                width: 0, height: 0,
+                borderTop: '10px solid transparent',
+                borderBottom: '10px solid transparent',
+                borderRight: '23px solid #666',
+                zIndex: 10,
+                filter: 'drop-shadow(-3px 0 5px rgba(150,150,150,.4))',
+              }} />
+
+              <svg width={420} height={420} style={{
+                transform: 'rotate(' + wdeg + 'deg)',
+                transition: anim ? 'transform 3.4s cubic-bezier(0.14, 0.58, 0.08, 1.0)' : 'none',
+              }}>
+                <circle cx={CX} cy={CY} r={R + 5} fill="none" stroke="#2a2a2a" strokeWidth={2} />
+                {dl.map(function(t, i) {
+                  return (
+                    <path
+                      key={t.id}
+                      d={slicePath(da[i].start, da[i].end)}
+                      fill={t.type === 'win' ? '#d4d4d4' : '#1e1e1e'}
+                      stroke="#0f0f0f"
+                      strokeWidth={1.5}
+                    />
+                  );
+                })}
+                <circle cx={CX} cy={CY} r={17} fill="#0f0f0f" stroke="#333" strokeWidth={2} />
+                <circle cx={CX} cy={CY} r={5.5} fill="#3a3a3a" />
+              </svg>
+            </div>
+
+            {/* Spin / hint */}
+            <div style={{ height: 54, display: 'flex', alignItems: 'center', marginTop: '6px' }}>
+              {phase === 'idle' && (
+                <button
+                  className="spin-btn"
+                  onClick={function(e) { e.stopPropagation(); spin(); }}
+                  style={{
+                    padding: '12px 54px', background: 'transparent',
+                    border: '2px solid #D4AF37', color: '#D4AF37',
+                    fontSize: '.95rem', fontFamily: "'Cinzel', serif",
+                    letterSpacing: '.45em', cursor: 'pointer',
+                    transition: 'background .15s, box-shadow .15s',
+                    boxShadow: '0 0 14px rgba(212,175,55,.1)',
+                  }}
+                >
+                  SPIN
+                </button>
+              )}
+              {(phase === 'spinning' || phase === 'reveal') && (
+                <span style={{ fontSize: '.7rem', letterSpacing: '.35em', color: '#2b2b2b', animation: 'blink 1.3s infinite' }}>
+                  {phase === 'spinning' ? 'CLICK ANYWHERE TO RESOLVE' : 'CLICK TO CONTINUE'}
+                </span>
+              )}
+            </div>
+
+            {/* Boon stack */}
+            {boons.length > 0 && (
+              <div style={{ marginTop: '16px', width: '100%', maxWidth: '760px' }}>
+                <div style={{ fontSize: '.56rem', letterSpacing: '.42em', color: '#1c1c1c', marginBottom: '6px' }}>
+                  BOON STACK &mdash; HOVER OR CLICK TO INSPECT
+                </div>
+                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                  {boons.map(function(b, i) {
+                    return <BoonTag key={(b.iid || b.id) + '_' + i} b={b} />;
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tile reveal — slides in from the right */}
+          {phase === 'reveal' && rtile && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 40, pointerEvents: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <div style={{ animation: 'tileReveal .54s cubic-bezier(0.22, 1, 0.36, 1) both' }}>
+                <svg width={310} height={260} overflow="visible">
+                  <path
+                    d={revealWedge(rtile.halfSpan)}
+                    fill={rtile.type === 'win' ? '#d4d4d4' : '#242424'}
+                    stroke={rtile.type === 'win' ? '#888' : '#555'}
+                    strokeWidth={2}
+                  />
+                  <text
+                    x={160} y={132}
+                    textAnchor="middle" dominantBaseline="middle"
+                    fontFamily="'Cinzel', serif" fontWeight="700"
+                    fontSize={20} letterSpacing="3"
+                    fill={rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0'}
+                  >
+                    {rtile.type === 'win' ? '* WIN *' : 'x LOSE x'}
+                  </text>
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* Overlay: boon shop / game over */}
+          {isOverlay && (
+            <div
+              style={{
+                position: 'fixed', inset: 0, zIndex: 50,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(6,6,6,.82)',
+                padding: '20px', overflowY: 'auto',
+                animation: 'overlayIn .3s ease',
+              }}
+              onClick={function(e) { e.stopPropagation(); }}
+            >
+              {phase === 'boon_select' && (
+                <div style={{
+                  width: '100%', maxWidth: '760px',
+                  background: '#111', border: '1px solid #2a2a2a',
+                  borderRadius: '6px', padding: '24px 20px',
+                  animation: 'fu .3s ease',
+                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
+                }}>
+                  <div style={{ textAlign: 'center', fontSize: '.68rem', letterSpacing: '.45em', color: '#383838', marginBottom: '18px' }}>
+                    CHOOSE A BOON
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {choices.map(function(b) {
+                      return (
+                        <div
+                          key={b.iid}
+                          className="boon-card"
+                          onClick={function(e) { e.stopPropagation(); pick(b); }}
+                          style={{
+                            border: '2px solid ' + RC[b.rarity],
+                            borderRadius: '4px', padding: '14px',
+                            width: '180px', cursor: 'pointer',
+                            background: RC[b.rarity] + '12',
+                            boxShadow: '0 0 10px ' + RC[b.rarity] + '28',
+                          }}
+                          onMouseEnter={function(e) { e.currentTarget.style.boxShadow = '0 0 24px ' + RC[b.rarity] + '58'; }}
+                          onMouseLeave={function(e) { e.currentTarget.style.boxShadow = '0 0 10px ' + RC[b.rarity] + '28'; }}
+                        >
+                          <div style={{ fontSize: '.58rem', color: RC[b.rarity], letterSpacing: '.35em', textTransform: 'uppercase', marginBottom: '7px' }}>
+                            {b.rarity}
+                          </div>
+                          <div style={{ fontSize: '.86rem', color: '#e0e0e0', marginBottom: '8px', fontWeight: '600', lineHeight: 1.2 }}>
+                            {b.name}
+                          </div>
+                          <div style={{ fontSize: '.7rem', color: '#666', lineHeight: '1.5', fontFamily: 'Georgia, serif' }}>
+                            {b.desc}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {phase === 'game_over' && (
+                <div style={{
+                  textAlign: 'center',
+                  background: '#111', border: '1px solid #2a2a2a',
+                  borderRadius: '6px', padding: '36px 40px',
+                  maxWidth: '560px', width: '100%',
+                  animation: 'fu .4s ease',
+                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
+                }}>
+                  <div style={{
+                    fontSize: 'clamp(1.6rem, 5vw, 2.5rem)', fontWeight: 700,
+                    color: '#CC1010', letterSpacing: '.22em',
+                    textShadow: '0 0 22px rgba(200,16,16,.5)',
+                    marginBottom: '6px',
+                  }}>
+                    ELIMINATED
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '1.05rem', color: '#333', letterSpacing: '.38em', marginBottom: '28px' }}>
+                    {sc} SPINS SURVIVED
+                  </div>
+                  {boons.length > 0 && (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '.56rem', letterSpacing: '.42em', color: '#222', marginBottom: '10px' }}>
+                        FINAL BOON STACK
+                      </div>
+                      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {boons.map(function(b, i) {
+                          return <BoonTag key={'go_' + (b.iid || b.id) + '_' + i} b={b} large={true} />;
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    className="again-btn"
+                    onClick={function(e) { e.stopPropagation(); restart(); }}
+                    style={{
+                      padding: '12px 44px', background: 'transparent',
+                      border: '2px solid #D4AF37', color: '#D4AF37',
+                      fontSize: '.9rem', fontFamily: "'Cinzel', serif",
+                      letterSpacing: '.38em', cursor: 'pointer',
+                      transition: 'background .15s',
+                    }}
+                  >
+                    PLAY AGAIN
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Wheel grows */}
+          {phase === 'growing' && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 100, pointerEvents: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(6,6,6,.92)',
+            }}>
+              <div style={{
+                fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', fontWeight: 700,
+                color: '#D4AF37', letterSpacing: '.3em',
+                border: '2px solid #D4AF37', padding: '22px 44px',
+                animation: 'zr .5s cubic-bezier(0.34, 1.56, 0.64, 1), growPulse 1s .5s infinite',
+              }}>
+                WHEEL GROWS
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
