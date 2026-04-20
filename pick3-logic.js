@@ -684,16 +684,19 @@
       for (var k = 0; k < b2.length; k++) {
         if (b2[k].effect === 'anchor_lose') anchorBoonIdx.push(k);
       }
-      var pairCount = Math.min(expiredAnchorTileIdx.length, anchorBoonIdx.length);
-      for (var ei = 0; ei < pairCount; ei++) {
+      var anchorExpirationsToProcess = Math.min(expiredAnchorTileIdx.length, anchorBoonIdx.length);
+      for (var ei = 0; ei < anchorExpirationsToProcess; ei++) {
         var ti = expiredAnchorTileIdx[ei];
         var unlocked = Object.assign({}, t2[ti]);
         delete unlocked.anchored;
         delete unlocked.anchorScale;
         t2[ti] = unlocked;
       }
-      for (var bi = pairCount - 1; bi >= 0; bi--) {
-        var removeAt = anchorBoonIdx[bi];
+      var removableAnchorBoonIdx = anchorBoonIdx
+        .slice(0, anchorExpirationsToProcess)
+        .sort(function(a, b) { return b - a; });
+      for (var bi = 0; bi < removableAnchorBoonIdx.length; bi++) {
+        var removeAt = removableAnchorBoonIdx[bi];
         if (removeAt >= 0 && removeAt < b2.length) {
           b2.splice(removeAt, 1);
         }
