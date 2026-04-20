@@ -96,7 +96,7 @@
     <h1>PICK 3 SLOP — TESTING</h1>
     <div class="controls">
       <label for="runsInput" class="control-label">Runs</label>
-      <input id="runsInput" type="number" min="1" step="1" value="500" />
+      <input id="runsInput" type="number" min="1" step="1" value="400" />
       <button id="runBtn">Run Simulation</button>
       <a href="./index.html" style="color:#6ea8ff;text-align:right;">Back to game</a>
     </div>
@@ -149,8 +149,26 @@
     }, {});
     // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
     var FRAME_TIME_BUDGET_MILLISECONDS = 25;
-    var SIMULATION_SPIN_CAP = 20000;
+    var SIMULATION_MAX_SPINS_PER_RUN = 400;
     var MAX_DEAD_ZONE_RETRIES = 18;
+
+    function formatBoonRange(rg) {
+      if (!rg) return 'N/A';
+      if (rg.int === true || rg.min === rg.max) return String(rg.min);
+      if (rg.step) return rg.min + ' to ' + rg.max + ' (step ' + rg.step + ')';
+      return rg.min + ' to ' + rg.max;
+    }
+
+    function formatBoonMeta(boon) {
+      if (boon.desc) return boon.rarity + ' · ' + boon.desc;
+      if (!boon.valueRanges) return boon.rarity;
+      var keys = Object.keys(boon.valueRanges);
+      if (!keys.length) return boon.rarity;
+      var ranges = keys.map(function(key) {
+        return key + ': ' + formatBoonRange(boon.valueRanges[key]);
+      }).join(', ');
+      return boon.rarity + ' · Range: ' + ranges;
+    }
 
     function cloneTiles() {
       return INIT_TILES.map(function(t) { return { id: t.id, type: t.type }; });
@@ -168,7 +186,7 @@
             '<strong style="color:' + RC[b.rarity] + '">' + (i + 1) + '. ' + b.name + '</strong>' +
             '<span style="color:#aaa">value ' + (orderedBoons.length - i) + '</span>' +
           '</div>' +
-          '<div class="meta">' + b.rarity + ' · ' + b.desc + '</div>';
+          '<div class="meta">' + formatBoonMeta(b) + '</div>';
         boonList.appendChild(li);
       }
     }
@@ -204,7 +222,7 @@
       var nid = 6;
       var pickedVals = [];
       // Safety cap prevents a pathological run from looping forever.
-      var cap = SIMULATION_SPIN_CAP;
+      var cap = SIMULATION_MAX_SPINS_PER_RUN;
 
       while (cap-- > 0) {
         sc += 1;

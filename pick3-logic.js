@@ -40,6 +40,10 @@
   function numericBoon(idRoot, name, effect, wMap, rangesByKey, descFn, extra) {
     var out = [];
     ['uncommon', 'rare', 'legendary'].forEach(function(rarity) {
+      var valueRanges = {};
+      Object.keys(rangesByKey).forEach(function(k) {
+        valueRanges[k] = Object.assign({}, rarityRange(rarity, rangesByKey[k]));
+      });
       out.push(boonTemplate({
         id: idRoot + '_' + rarity,
         group: idRoot,
@@ -47,6 +51,7 @@
         rarity: rarity,
         w: wMap[rarity],
         randomValue: true,
+        valueRanges: valueRanges,
         roll: function() {
           var rolled = {};
           Object.keys(rangesByKey).forEach(function(k) {
