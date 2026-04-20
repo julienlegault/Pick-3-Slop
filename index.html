@@ -24,12 +24,30 @@
       62%  { transform: translateX(-5px) scale(1.05); opacity: 1; }
       100% { transform: translateX(0) scale(1); opacity: 1; }
     }
+    @keyframes boonShake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-2px) rotate(-1deg); }
+      40% { transform: translateX(2px) rotate(1deg); }
+      60% { transform: translateX(-2px) rotate(-1deg); }
+      80% { transform: translateX(2px) rotate(1deg); }
+    }
+    @keyframes loseFlipToWin {
+      0% { transform: scale(1) rotateY(0deg); opacity: 1; }
+      50% { transform: scale(1.07) rotateY(90deg); opacity: .7; }
+      100% { transform: scale(1) rotateY(180deg); opacity: 1; }
+    }
+    @keyframes revealRescueFlip {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.08); }
+      100% { transform: scale(1); }
+    }
 
     .spin-btn:hover   { background: rgba(212,175,55,.1) !important; box-shadow: 0 0 26px rgba(212,175,55,.3) !important; }
     .again-btn:hover  { background: rgba(212,175,55,.1) !important; }
     .boon-card        { transition: transform .15s, box-shadow .15s !important; }
     .boon-card:hover  { transform: translateY(-4px) !important; }
     .boon-tag         { position: relative; display: inline-block; }
+    .boon-tag.shaking { animation: boonShake .22s ease-in-out 2; }
     .boon-tip         {
       display: none;
       position: absolute;
@@ -61,7 +79,7 @@
   <div id="root"></div>
   <script src="./pick3-logic.js"></script>
   <script type="text/babel">
-    const { useState, useRef, useCallback } = React;
+    const { useState, useRef, useCallback, useEffect } = React;
       const {
         CX, CY, R, LAND, BOONS, RC, INIT_TILES,
         slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
@@ -72,24 +90,33 @@
     function BoonTag(props) {
       var b = props.b;
       var large = props.large;
+      var shaking = props.shaking;
+      var draggable = props.draggable;
       var [pinned, setPinned] = useState(false);
       var c = RC[b.rarity];
       var sz = large
         ? { padding: '4px 11px', fontSize: '.7rem' }
         : { padding: '3px 8px',  fontSize: '.62rem' };
+      var cls = 'boon-tag' + (pinned ? ' pinned' : '') + (shaking ? ' shaking' : '');
 
       return (
         <span
-          className={'boon-tag' + (pinned ? ' pinned' : '')}
+          className={cls}
+          draggable={!!draggable}
+          onDragStart={props.onDragStart}
+          onDragOver={props.onDragOver}
+          onDrop={props.onDrop}
+          onDragEnd={props.onDragEnd}
           onClick={function(e) { e.stopPropagation(); setPinned(function(p) { return !p; }); }}
           style={Object.assign({}, sz, {
             border: '1px solid ' + c,
             borderRadius: '2px',
             color: c,
             background: pinned ? c + '28' : c + '14',
-            cursor: 'pointer',
+            cursor: draggable ? 'grab' : 'pointer',
             transition: 'background .12s',
             fontFamily: "'Cinzel', serif",
+            outline: props.dropTarget ? ('1px dashed ' + c) : 'none',
           })}
         >
           {b.name}{b.charges > 0 ? ' (' + b.charges + ')' : ''}
@@ -125,9 +152,14 @@
       var _s9  = useState([]);         var choices = _s9[0]; var setChoices = _s9[1];
       var _s10 = useState(6);          var nid   = _s10[0]; var setNid   = _s10[1];
       var _s11 = useState(0);          var shopsSeen = _s11[0]; var setShopsSeen = _s11[1];
+      var _s12 = useState([]);         var flippedTiles = _s12[0]; var setFlippedTiles = _s12[1];
+      var _s13 = useState(null);       var shakingBoon = _s13[0]; var setShakingBoon = _s13[1];
+      var _s14 = useState(false);      var revealFlip = _s14[0]; var setRevealFlip = _s14[1];
+      var _s15 = useState(null);       var dragIid = _s15[0]; var setDragIid = _s15[1];
+      var _s16 = useState(null);       var dragOverIid = _s16[0]; var setDragOverIid = _s16[1];
 
       var spinRef = useRef(null);
-      var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null);
+      var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null), t4 = useRef([]);
       var doneRef = useRef(false);
       var revDone = useRef(false);
 
@@ -149,20 +181,47 @@
         else setPhase('game_over');
       }, []);
 
-      var finish = useCallback(function() {
-        if (doneRef.current) return;
-        doneRef.current = true;
-        clearTimeout(t1.current);
-        var d = spinRef.current;
+      var finalizeReveal = useCallback(function(d) {
         setAnim(false);
         setWdeg(d.targetDeg);
         setBoons(d.fb);
-        setRtile({ type: d.result, halfSpan: d.halfSpan });
+        setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan });
+        setRevealFlip(false);
         setPhase('reveal');
         setSc(function(n) { return n + 1; });
         revDone.current = false;
         t2.current = setTimeout(advance, 720);
       }, [advance]);
+
+      var finish = useCallback(function() {
+        if (doneRef.current) return;
+        doneRef.current = true;
+        clearTimeout(t1.current);
+        var d = spinRef.current;
+        if (!d) return;
+
+        t4.current.forEach(function(tid) { clearTimeout(tid); });
+        t4.current = [];
+        setShakingBoon(null);
+
+        var chain = d.triggered || [];
+        if (chain.length > 0) {
+          var idx = 0;
+          function step() {
+            if (idx >= chain.length) {
+              setShakingBoon(null);
+              finalizeReveal(d);
+              return;
+            }
+            setShakingBoon(chain[idx++]);
+            var tid = setTimeout(function() { step(); }, 180);
+            t4.current.push(tid);
+          }
+          step();
+        } else {
+          finalizeReveal(d);
+        }
+      }, [finalizeReveal]);
 
       var spin = useCallback(function() {
         if (phase !== 'idle') return;
@@ -181,14 +240,16 @@
         var delta  = ((LAND - tc - cm) % 360 + 360) % 360;
         var target = wdeg + (5 + Math.floor(Math.random() * 4)) * 360 + delta;
 
-        var result = layout[idx].type, fb = spinBoons;
-        if (layout[idx].type === 'lose') {
+        var landed = layout[idx].type;
+        var result = landed, fb = spinBoons, triggered = [];
+        if (landed === 'lose') {
           var res = tryRescue(spinBoons);
           result = res.ok ? 'win' : 'lose';
           fb = res.boons;
+          triggered = res.triggered || [];
         }
 
-        spinRef.current = { targetDeg: target, result: result, fb: fb, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen };
+        spinRef.current = { targetDeg: target, result: result, baseType: landed, triggered: triggered, fb: fb, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen };
         doneRef.current = false;
         setAnim(true);
         setWdeg(target);
@@ -201,12 +262,24 @@
         else if (phase === 'reveal') advance();
       }, [phase, finish, advance]);
 
+      useEffect(function() {
+        if (phase !== 'reveal' || !rtile) return;
+        if (rtile.baseType === 'lose' && rtile.type === 'win') {
+          var tid = setTimeout(function() { setRevealFlip(true); }, 140);
+          return function() { clearTimeout(tid); };
+        }
+      }, [phase, rtile]);
+
       var pick = useCallback(function(boon) {
         var res = applyBoon(boon, tiles, boons, nid);
         setTiles(res.tiles);
         setBoons(res.boons);
         setNid(res.nextId);
         setChoices([]);
+        setFlippedTiles(res.flippedIds || []);
+        if (res.flippedIds && res.flippedIds.length > 0) {
+          setTimeout(function() { setFlippedTiles([]); }, 560);
+        }
         if (res.grew) {
           setGl(function(g) { return g + 1; });
           setPhase('growing');
@@ -226,13 +299,52 @@
 
       var restart = useCallback(function() {
         [t1, t2, t3].forEach(function(r) { clearTimeout(r.current); });
+        t4.current.forEach(function(tid) { clearTimeout(tid); });
+        t4.current = [];
         doneRef.current = true;
         revDone.current = true;
         spinRef.current = null;
         setTiles(INIT_TILES);
         setBoons([]); setSc(0); setGl(0); setPhase('idle');
         setWdeg(0); setAnim(false); setRtile(null);
+        setFlippedTiles([]); setShakingBoon(null); setRevealFlip(false);
+        setDragIid(null); setDragOverIid(null);
         setChoices([]); setNid(6); setShopsSeen(0);
+      }, []);
+
+      var shownBoons = boons.filter(function(b) { return b.effect !== 'add_win'; });
+      var flippedMap = {};
+      flippedTiles.forEach(function(id) { flippedMap[id] = true; });
+
+      var startDragBoon = useCallback(function(iid) {
+        setDragIid(iid);
+      }, []);
+
+      var overDragBoon = useCallback(function(e, iid) {
+        if (!dragIid || dragIid === iid) return;
+        e.preventDefault();
+        setDragOverIid(iid);
+      }, [dragIid]);
+
+      var dropDragBoon = useCallback(function(e, iid) {
+        e.preventDefault();
+        if (!dragIid || dragIid === iid) return;
+        setBoons(function(prev) {
+          var src = prev.findIndex(function(b) { return b.iid === dragIid; });
+          var dst = prev.findIndex(function(b) { return b.iid === iid; });
+          if (src < 0 || dst < 0) return prev;
+          var next = prev.slice();
+          var moved = next.splice(src, 1)[0];
+          next.splice(dst, 0, moved);
+          return next;
+        });
+        setDragIid(null);
+        setDragOverIid(null);
+      }, [dragIid]);
+
+      var endDragBoon = useCallback(function() {
+        setDragIid(null);
+        setDragOverIid(null);
       }, []);
 
       var dl   = buildLayout(tiles, boons, false);
@@ -246,7 +358,7 @@
             minHeight: '100vh', background: '#0f0f0f', color: '#e0e0e0',
             fontFamily: "'Cinzel', serif",
             display: 'flex', flexDirection: 'column', alignItems: 'center',
-            padding: '24px 16px 60px',
+            padding: '14px 12px 38px',
             cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default',
             userSelect: 'none',
           }}
@@ -260,28 +372,28 @@
             pointerEvents: isOverlay ? 'none' : 'auto',
           }}>
             <h1 style={{
-              fontSize: 'clamp(1.4rem, 4vw, 2rem)', letterSpacing: '.32em',
+              fontSize: 'clamp(1.25rem, 3.2vw, 1.72rem)', letterSpacing: '.28em',
               color: '#D4AF37', margin: '0 0 4px', fontWeight: 700,
               textShadow: '0 0 24px rgba(212,175,55,.22)',
             }}>PICK 3 SLOP</h1>
-            <div style={{ fontFamily: 'monospace', fontSize: '.78rem', color: '#2c2c2c', letterSpacing: '.35em', marginBottom: '18px' }}>
+            <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#2c2c2c', letterSpacing: '.32em', marginBottom: '12px' }}>
               SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
             </div>
 
             {/* Wheel */}
-            <div style={{ position: 'relative', width: 435, height: 420 }}>
+            <div style={{ position: 'relative', width: 385, height: 370 }}>
               {/* Right-side pointer */}
               <div style={{
-                position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)',
+                position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
                 width: 0, height: 0,
-                borderTop: '10px solid transparent',
-                borderBottom: '10px solid transparent',
-                borderRight: '23px solid #666',
+                borderTop: '8px solid transparent',
+                borderBottom: '8px solid transparent',
+                borderRight: '19px solid #666',
                 zIndex: 10,
                 filter: 'drop-shadow(-3px 0 5px rgba(150,150,150,.4))',
               }} />
 
-              <svg width={420} height={420} style={{
+              <svg width={370} height={370} viewBox="0 0 420 420" style={{
                 transform: 'rotate(' + wdeg + 'deg)',
                 transition: anim ? 'transform 3.4s cubic-bezier(0.14, 0.58, 0.08, 1.0)' : 'none',
               }}>
@@ -294,6 +406,11 @@
                       fill={t.type === 'dead' ? '#3a2f45' : (t.type === 'win' ? '#d4d4d4' : '#1e1e1e')}
                       stroke="#0f0f0f"
                       strokeWidth={1.5}
+                      style={flippedMap[t.id] ? {
+                        animation: 'loseFlipToWin .55s ease',
+                        transformBox: 'fill-box',
+                        transformOrigin: 'center',
+                      } : null}
                     />
                   );
                 })}
@@ -303,16 +420,16 @@
             </div>
 
             {/* Spin / hint */}
-            <div style={{ height: 54, display: 'flex', alignItems: 'center', marginTop: '6px' }}>
+            <div style={{ height: 45, display: 'flex', alignItems: 'center', marginTop: '4px' }}>
               {phase === 'idle' && (
                 <button
                   className="spin-btn"
                   onClick={function(e) { e.stopPropagation(); spin(); }}
                   style={{
-                    padding: '12px 54px', background: 'transparent',
+                    padding: '9px 42px', background: 'transparent',
                     border: '2px solid #D4AF37', color: '#D4AF37',
-                    fontSize: '.95rem', fontFamily: "'Cinzel', serif",
-                    letterSpacing: '.45em', cursor: 'pointer',
+                    fontSize: '.82rem', fontFamily: "'Cinzel', serif",
+                    letterSpacing: '.4em', cursor: 'pointer',
                     transition: 'background .15s, box-shadow .15s',
                     boxShadow: '0 0 14px rgba(212,175,55,.1)',
                   }}
@@ -321,25 +438,37 @@
                 </button>
               )}
               {(phase === 'spinning' || phase === 'reveal') && (
-                <span style={{ fontSize: '.7rem', letterSpacing: '.35em', color: '#2b2b2b', animation: 'blink 1.3s infinite' }}>
+                <span style={{ fontSize: '.62rem', letterSpacing: '.32em', color: '#2b2b2b', animation: 'blink 1.3s infinite' }}>
                   {phase === 'spinning' ? 'CLICK ANYWHERE TO RESOLVE' : 'CLICK TO CONTINUE'}
                 </span>
               )}
             </div>
 
             {/* Boon stack */}
-            {boons.length > 0 && (
+            {shownBoons.length > 0 && (
               <div style={{
-                marginTop: '16px', width: '100%', maxWidth: '760px',
+                marginTop: '10px', width: '100%', maxWidth: '680px',
                 background: 'rgba(8,8,8,0.9)', border: '1px solid #1e1e1e',
-                borderRadius: '4px', padding: '10px 14px',
+                borderRadius: '4px', padding: '8px 11px',
               }}>
-                <div style={{ fontSize: '.56rem', letterSpacing: '.42em', color: '#444', marginBottom: '6px' }}>
-                  BOON STACK &mdash; HOVER OR CLICK TO INSPECT
+                <div style={{ fontSize: '.5rem', letterSpacing: '.35em', color: '#444', marginBottom: '5px' }}>
+                  BOON STACK &mdash; DRAG TO REORDER | HOVER OR CLICK TO INSPECT
                 </div>
                 <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                  {boons.map(function(b, i) {
-                    return <BoonTag key={(b.iid || b.id) + '_' + i} b={b} />;
+                  {shownBoons.map(function(b, i) {
+                    return (
+                      <BoonTag
+                        key={(b.iid || b.id) + '_' + i}
+                        b={b}
+                        shaking={shakingBoon === (b.iid || (b.id + '_' + i))}
+                        draggable={true}
+                        dropTarget={dragOverIid === b.iid}
+                        onDragStart={function(e) { e.stopPropagation(); startDragBoon(b.iid); }}
+                        onDragOver={function(e) { overDragBoon(e, b.iid); }}
+                        onDrop={function(e) { e.stopPropagation(); dropDragBoon(e, b.iid); }}
+                        onDragEnd={endDragBoon}
+                      />
+                    );
                   })}
                 </div>
               </div>
@@ -353,23 +482,37 @@
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: 'rgba(0,0,0,0.65)',
             }}>
-              <div style={{ animation: 'tileReveal .54s cubic-bezier(0.22, 1, 0.36, 1) both' }}>
+              <div style={{
+                animation: 'tileReveal .54s cubic-bezier(0.22, 1, 0.36, 1) both',
+                transformStyle: 'preserve-3d',
+              }}>
                 <svg width={310} height={260} overflow="visible">
+                  <g style={rtile.baseType === 'lose' && rtile.type === 'win' ? {
+                    animation: 'revealRescueFlip .45s ease',
+                    transformBox: 'fill-box',
+                    transformOrigin: 'center',
+                  } : null}>
                   <path
                     d={revealWedge(rtile.halfSpan)}
-                    fill={rtile.type === 'win' ? '#d4d4d4' : '#242424'}
-                    stroke={rtile.type === 'win' ? '#888' : '#555'}
+                    fill={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#242424' : (rtile.type === 'win' ? '#d4d4d4' : '#242424')}
+                    stroke={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#555' : (rtile.type === 'win' ? '#888' : '#555')}
                     strokeWidth={2}
+                    style={rtile.baseType === 'lose' && rtile.type === 'win' ? {
+                      animation: 'loseFlipToWin .45s ease',
+                      transformBox: 'fill-box',
+                      transformOrigin: 'center',
+                    } : null}
                   />
                   <text
                     x={160} y={132}
                     textAnchor="middle" dominantBaseline="middle"
                     fontFamily="'Cinzel', serif" fontWeight="700"
                     fontSize={20} letterSpacing="3"
-                    fill={rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0'}
+                    fill={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#d0d0d0' : (rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0')}
                   >
-                    {rtile.type === 'win' ? '* WIN *' : 'x LOSE x'}
+                    {(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? 'x LOSE x' : (rtile.type === 'win' ? '* WIN *' : 'x LOSE x')}
                   </text>
+                  </g>
                 </svg>
               </div>
             </div>
@@ -382,40 +525,40 @@
                 position: 'fixed', inset: 0, zIndex: 50,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'rgba(6,6,6,.82)',
-                padding: '20px', overflowY: 'auto',
+                padding: '14px', overflowY: 'auto',
                 animation: 'overlayIn .3s ease',
               }}
               onClick={function(e) { e.stopPropagation(); }}
             >
               {phase === 'boon_select' && (
                 <div style={{
-                  width: '100%', maxWidth: '760px',
+                  width: '100%', maxWidth: '700px',
                   background: '#111', border: '1px solid #2a2a2a',
-                  borderRadius: '6px', padding: '24px 20px',
+                  borderRadius: '6px', padding: '18px 16px',
                   animation: 'fu .3s ease',
                   boxShadow: '0 8px 48px rgba(0,0,0,.9)',
                 }}>
-                  <div style={{ textAlign: 'center', fontSize: '.68rem', letterSpacing: '.45em', color: '#383838', marginBottom: '18px' }}>
+                  <div style={{ textAlign: 'center', fontSize: '.6rem', letterSpacing: '.36em', color: '#383838', marginBottom: '12px' }}>
                     CHOOSE A BOON
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
                     <button
                       onClick={function(e) { e.stopPropagation(); rerollChoices(); }}
                       disabled={shopRerolls <= 0}
                       style={{
-                        padding: '8px 16px',
+                        padding: '7px 14px',
                         background: 'transparent',
                         border: '1px solid ' + (shopRerolls > 0 ? '#D4AF37' : '#444'),
                         color: shopRerolls > 0 ? '#D4AF37' : '#555',
                         letterSpacing: '.18em',
-                        fontSize: '.62rem',
+                        fontSize: '.56rem',
                         cursor: shopRerolls > 0 ? 'pointer' : 'not-allowed',
                       }}
                     >
                       REROLL SHOP ({shopRerolls})
                     </button>
                   </div>
-                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
                     {choices.map(function(b) {
                       return (
                         <div
@@ -424,21 +567,21 @@
                           onClick={function(e) { e.stopPropagation(); pick(b); }}
                           style={{
                             border: '2px solid ' + RC[b.rarity],
-                            borderRadius: '4px', padding: '14px',
-                            width: '180px', cursor: 'pointer',
+                            borderRadius: '4px', padding: '11px',
+                            width: '158px', cursor: 'pointer',
                             background: RC[b.rarity] + '12',
                             boxShadow: '0 0 10px ' + RC[b.rarity] + '28',
                           }}
                           onMouseEnter={function(e) { e.currentTarget.style.boxShadow = '0 0 24px ' + RC[b.rarity] + '58'; }}
                           onMouseLeave={function(e) { e.currentTarget.style.boxShadow = '0 0 10px ' + RC[b.rarity] + '28'; }}
                         >
-                          <div style={{ fontSize: '.58rem', color: RC[b.rarity], letterSpacing: '.35em', textTransform: 'uppercase', marginBottom: '7px' }}>
+                          <div style={{ fontSize: '.52rem', color: RC[b.rarity], letterSpacing: '.3em', textTransform: 'uppercase', marginBottom: '5px' }}>
                             {b.rarity}
                           </div>
-                          <div style={{ fontSize: '.86rem', color: '#e0e0e0', marginBottom: '8px', fontWeight: '600', lineHeight: 1.2 }}>
+                          <div style={{ fontSize: '.78rem', color: '#e0e0e0', marginBottom: '7px', fontWeight: '600', lineHeight: 1.2 }}>
                             {b.name}
                           </div>
-                          <div style={{ fontSize: '.7rem', color: '#666', lineHeight: '1.5', fontFamily: 'Georgia, serif' }}>
+                          <div style={{ fontSize: '.62rem', color: '#666', lineHeight: '1.45', fontFamily: 'Georgia, serif' }}>
                             {b.desc}
                           </div>
                         </div>
@@ -452,29 +595,29 @@
                 <div style={{
                   textAlign: 'center',
                   background: '#111', border: '1px solid #2a2a2a',
-                  borderRadius: '6px', padding: '36px 40px',
-                  maxWidth: '560px', width: '100%',
+                  borderRadius: '6px', padding: '28px 30px',
+                  maxWidth: '500px', width: '100%',
                   animation: 'fu .4s ease',
                   boxShadow: '0 8px 48px rgba(0,0,0,.9)',
                 }}>
                   <div style={{
-                    fontSize: 'clamp(1.6rem, 5vw, 2.5rem)', fontWeight: 700,
+                    fontSize: 'clamp(1.35rem, 4.3vw, 2.1rem)', fontWeight: 700,
                     color: '#CC1010', letterSpacing: '.22em',
                     textShadow: '0 0 22px rgba(200,16,16,.5)',
                     marginBottom: '6px',
                   }}>
                     ELIMINATED
                   </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: '1.05rem', color: '#333', letterSpacing: '.38em', marginBottom: '28px' }}>
+                  <div style={{ fontFamily: 'monospace', fontSize: '.9rem', color: '#333', letterSpacing: '.35em', marginBottom: '20px' }}>
                     {sc} SPINS SURVIVED
                   </div>
-                  {boons.length > 0 && (
-                    <div style={{ marginBottom: '24px' }}>
-                      <div style={{ fontSize: '.56rem', letterSpacing: '.42em', color: '#222', marginBottom: '10px' }}>
+                  {shownBoons.length > 0 && (
+                    <div style={{ marginBottom: '20px' }}>
+                      <div style={{ fontSize: '.52rem', letterSpacing: '.38em', color: '#222', marginBottom: '8px' }}>
                         FINAL BOON STACK
                       </div>
                       <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        {boons.map(function(b, i) {
+                        {shownBoons.map(function(b, i) {
                           return <BoonTag key={'go_' + (b.iid || b.id) + '_' + i} b={b} large={true} />;
                         })}
                       </div>
@@ -484,10 +627,10 @@
                     className="again-btn"
                     onClick={function(e) { e.stopPropagation(); restart(); }}
                     style={{
-                      padding: '12px 44px', background: 'transparent',
+                      padding: '10px 36px', background: 'transparent',
                       border: '2px solid #D4AF37', color: '#D4AF37',
-                      fontSize: '.9rem', fontFamily: "'Cinzel', serif",
-                      letterSpacing: '.38em', cursor: 'pointer',
+                      fontSize: '.8rem', fontFamily: "'Cinzel', serif",
+                      letterSpacing: '.32em', cursor: 'pointer',
                       transition: 'background .15s',
                     }}
                   >
