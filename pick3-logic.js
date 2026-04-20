@@ -15,8 +15,10 @@
   var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
   var MIN_LOSE_TILE_MULT = 0.08;
+  var WHEEL_GROWTH_MULTIPLIER = 3;
   var EARLY_GROWTH_LEVEL_LIMIT = 3;
   var MID_GROWTH_LEVEL_LIMIT = 5;
+  var MID_GROWTH_DECAY_START_LEVEL = MID_GROWTH_LEVEL_LIMIT - 1;
   var EARLY_GROWTH_WIN_RATIO = 2 / 3;
   var MID_GROWTH_WIN_RATIO = 5 / 9;
   var MIN_GROWTH_WIN_RATIO = 1 / 3;
@@ -808,7 +810,7 @@
   function growthWinRatio(growthLevel) {
     if (growthLevel < EARLY_GROWTH_LEVEL_LIMIT) return EARLY_GROWTH_WIN_RATIO;
     if (growthLevel < MID_GROWTH_LEVEL_LIMIT) return MID_GROWTH_WIN_RATIO;
-    var reduced = MID_GROWTH_WIN_RATIO - ((growthLevel - (MID_GROWTH_LEVEL_LIMIT - 1)) * GROWTH_WIN_RATIO_STEP);
+    var reduced = MID_GROWTH_WIN_RATIO - ((growthLevel - MID_GROWTH_DECAY_START_LEVEL) * GROWTH_WIN_RATIO_STEP);
     return clamp(reduced, MIN_GROWTH_WIN_RATIO, MID_GROWTH_WIN_RATIO);
   }
 
@@ -834,7 +836,7 @@
     var level = 0;
     var size = INIT_TILES.length;
     while (size < tileCount) {
-      size *= 3;
+      size *= WHEEL_GROWTH_MULTIPLIER;
       level += 1;
     }
     return level;
@@ -894,7 +896,7 @@
       var n = t2.length;
       var priorGrowthLevel = inferGrowthLevelFromTileCount(n);
       var ratio = growthWinRatio(priorGrowthLevel);
-      var grown = buildGrowthTiles(n * 3, ratio, id);
+      var grown = buildGrowthTiles(n * WHEEL_GROWTH_MULTIPLIER, ratio, id);
       t2 = grown.tiles;
       id = grown.nextId;
 
