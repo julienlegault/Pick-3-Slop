@@ -126,6 +126,7 @@
       return a.name.localeCompare(b.name);
     });
     var INIT_TILES = window.Pick3Logic.INIT_TILES;
+    var prepareSpin = window.Pick3Logic.prepareSpin;
     var buildLayout = window.Pick3Logic.buildLayout;
     var pickWeighted = window.Pick3Logic.pickWeighted;
     var drawBoons = window.Pick3Logic.drawBoons;
@@ -207,8 +208,13 @@
       while (cap-- > 0) {
         sc += 1;
         var nChoices = 3 + boons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
+        var prep = prepareSpin(tiles, boons);
+        tiles = prep.tiles;
+        boons = prep.boons;
         var layout = buildLayout(tiles, boons, true);
         var idx = pickWeighted(layout);
+        var guard = 18;
+        while (layout[idx].type === 'dead' && guard-- > 0) idx = pickWeighted(layout);
         var result = layout[idx].type;
 
         if (result === 'lose') {
@@ -218,7 +224,9 @@
         }
         if (result === 'lose') break;
 
-        var choices = drawBoons(nChoices, gl);
+        var shop = drawBoons(nChoices, gl, boons);
+        var choices = shop.choices;
+        boons = shop.boons;
         if (!choices.length) break;
 
         var picked = chooseByPriority(choices, prioMap);
