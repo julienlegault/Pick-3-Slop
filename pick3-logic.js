@@ -15,6 +15,7 @@
   var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
   var MIN_LOSE_TILE_MULT = 0.08;
+  // Wheel-growth difficulty curve: early wheels are forgiving, then trend harder over time.
   var WHEEL_GROWTH_MULTIPLIER = 3;
   var EARLY_GROWTH_LEVEL_LIMIT = 3;
   var MID_GROWTH_LEVEL_LIMIT = 5;
@@ -808,6 +809,7 @@
   }
 
   function growthWinRatio(growthLevel) {
+    // First growth bands keep stronger win density (2/3 then ~5/9), then decay toward 1/3 floor.
     if (growthLevel < EARLY_GROWTH_LEVEL_LIMIT) return EARLY_GROWTH_WIN_RATIO;
     if (growthLevel < MID_GROWTH_LEVEL_LIMIT) return MID_GROWTH_WIN_RATIO;
     var reduced = MID_GROWTH_WIN_RATIO - ((growthLevel - MID_GROWTH_DECAY_START_LEVEL) * GROWTH_WIN_RATIO_STEP);
@@ -833,6 +835,7 @@
   }
 
   function inferGrowthLevelFromTileCount(tileCount) {
+    // Reconstruct prior growth count directly from wheel size progression (base size * 3^n).
     var level = 0;
     var size = INIT_TILES.length;
     while (size < tileCount) {
