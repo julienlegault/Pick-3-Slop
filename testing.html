@@ -106,8 +106,8 @@
         <ul id="boonList"></ul>
       </div>
       <div class="panel">
-        <div class="sub">Scatter plot: x = spins survived, y = average boon number</div>
-        <canvas id="plot" width="900" height="560" role="img" aria-label="Scatter plot of simulation runs with spins survived on the horizontal axis and average boon number on the vertical axis"></canvas>
+        <div class="sub">Dot histogram: x = spins survived, y = runs ended · dot color: green = common boons, red = rare boons</div>
+        <canvas id="plot" width="900" height="560" role="img" aria-label="Dot histogram of simulation runs. Horizontal axis is spins survived, vertical axis is number of runs that ended at that spin count. Each dot is colored green for runs with common boon picks and red for runs with rare boon picks."></canvas>
         <div id="status" role="status" aria-live="polite"></div>
       </div>
     </div>
@@ -116,7 +116,15 @@
   <script src="./pick3-logic.js"></script>
   <script>
     var BASE_BOONS = window.Pick3Logic.BOONS;
-    var orderedBoons = BASE_BOONS.slice();
+    // Higher number means rarer boon so default priority starts from the rarest at the top.
+    var RARITY_RANK = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
+    var orderedBoons = BASE_BOONS.slice().sort(function(a, b) {
+      var rarityDiff = (RARITY_RANK[b.rarity] || 0) - (RARITY_RANK[a.rarity] || 0);
+      if (rarityDiff !== 0) return rarityDiff;
+      var weightDiff = (a.w || 0) - (b.w || 0);
+      if (weightDiff !== 0) return weightDiff;
+      return a.name.localeCompare(b.name);
+    });
     var INIT_TILES = window.Pick3Logic.INIT_TILES;
     var buildLayout = window.Pick3Logic.buildLayout;
     var pickWeighted = window.Pick3Logic.pickWeighted;
@@ -250,51 +258,84 @@
 
       if (!data.length) return;
 
-      var xMax = Math.max(1, data.reduce(function(m, d) { return Math.max(m, d.spins); }, 0));
-      var yMax = Math.max(1, BASE_BOONS.length);
-      var yStep = 1;
+      // Cap x-axis at 99th-percentile of spins so rare outliers don't compress the distribution.
+      var sortedSpins = data.map(function(d) { return d.spins; }).sort(function(a, b) { return a - b; });
+      var p99idx = Math.min(Math.floor(sortedSpins.length * 0.99), sortedSpins.length - 1);
+      var xMax = Math.max(1, sortedSpins[p99idx]);
+
+      // Bin runs by spins survived so columns stay readable regardless of range.
+      var BIN_COUNT = 80;
+      var binSize = Math.max(1, Math.ceil(xMax / BIN_COUNT));
+      var actualBins = Math.ceil(xMax / binSize);
+      var bins = [];
+      for (var i = 0; i < actualBins; i++) bins.push([]);
+      for (var j = 0; j < data.length; j++) {
+        // spins is always >= 1; runs beyond xMax are clamped into the last bin.
+        var binIdx = Math.min(Math.floor(Math.max(0, data[j].spins - 1) / binSize), actualBins - 1);
+        bins[binIdx].push(data[j]);
+      }
+
+      var yMax = Math.max(1, bins.reduce(function(m, b) { return Math.max(m, b.length); }, 0));
       var xTicks = 8;
 
       ctx.fillStyle = '#7a7a7a';
       ctx.font = '12px monospace';
 
       for (var i = 0; i <= xTicks; i++) {
-        var xv = (xMax / xTicks) * i;
+        var xv = Math.round((xMax / xTicks) * i);
         var x = ml + (xv / xMax) * pw;
         ctx.strokeStyle = '#222';
         ctx.beginPath();
         ctx.moveTo(x, mt);
         ctx.lineTo(x, h - mb);
         ctx.stroke();
-        ctx.fillText(String(Math.round(xv)), x - 8, h - mb + 16);
+        ctx.fillText(String(xv), x - 8, h - mb + 16);
       }
 
-      for (var y = 0; y <= yMax; y += yStep) {
-        var py = h - mb - (y / yMax) * ph;
+      var yTickCount = 5;
+      for (var yi = 0; yi <= yTickCount; yi++) {
+        var yv = Math.round((yMax / yTickCount) * yi);
+        var py = h - mb - (yv / yMax) * ph;
         ctx.strokeStyle = '#1f1f1f';
         ctx.beginPath();
         ctx.moveTo(ml, py);
         ctx.lineTo(w - mr, py);
         ctx.stroke();
-        ctx.fillText(String(y), 24, py + 4);
+        ctx.fillStyle = '#7a7a7a';
+        ctx.fillText(String(yv), 24, py + 4);
       }
 
       ctx.fillStyle = '#9f9f9f';
       ctx.fillText('Spins survived', ml + pw / 2 - 40, h - 12);
       ctx.save();
-      ctx.translate(14, mt + ph / 2 + 50);
+      ctx.translate(14, mt + ph / 2 + 36);
       ctx.rotate(-Math.PI / 2);
-      ctx.fillText('Average boon number', 0, 0);
+      ctx.fillText('Runs ended', 0, 0);
       ctx.restore();
 
-      for (var j = 0; j < data.length; j++) {
-        var d = data[j];
-        var dx = ml + (d.spins / xMax) * pw;
-        var dy = h - mb - (Math.min(d.avgBoonNumber, yMax) / yMax) * ph;
-        ctx.fillStyle = 'rgba(212,175,55,0.6)';
-        ctx.beginPath();
-        ctx.arc(dx, dy, 2.1, 0, Math.PI * 2);
-        ctx.fill();
+      // Dot size: 0.42 leaves a small gap between adjacent dots; clamped to 1-3.5px for visibility.
+      var dotR = Math.max(1, Math.min(3.5, Math.min(pw / actualBins * 0.42, ph / yMax * 0.42)));
+      // Colour scale: avgBoonNumber / BASE_BOONS.length → 0=common(green) to 1=rare(red).
+      var maxAvg = BASE_BOONS.length;
+      var MAX_RED_COMPONENT = 220;
+      var MAX_GREEN_COMPONENT = 200;
+
+      for (var bi = 0; bi < actualBins; bi++) {
+        var bin = bins[bi];
+        if (!bin.length) continue;
+        var binMidSpins = (bi + 0.5) * binSize;
+        var bx = ml + (binMidSpins / xMax) * pw;
+        for (var ri = 0; ri < bin.length; ri++) {
+          var run = bin[ri];
+          var by = h - mb - ((ri + 1) / yMax) * ph;
+          var t = Math.min(run.avgBoonNumber / maxAvg, 1);
+          var rc = Math.round(t * MAX_RED_COMPONENT);
+          var gc = Math.round((1 - t) * MAX_GREEN_COMPONENT);
+          ctx.fillStyle = 'rgba(' + rc + ',' + gc + ',20,0.78)';
+          ctx.beginPath();
+          ctx.arc(bx, by, dotR, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 
