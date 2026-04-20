@@ -150,6 +150,7 @@
     // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
     var FRAME_TIME_BUDGET_MILLISECONDS = 25;
     var SIMULATION_SPIN_CAP = 20000;
+    var MAX_DEAD_ZONE_RETRIES = 18;
 
     function cloneTiles() {
       return INIT_TILES.map(function(t) { return { id: t.id, type: t.type }; });
@@ -213,7 +214,7 @@
         boons = prep.boons;
         var layout = buildLayout(tiles, boons, true);
         var idx = pickWeighted(layout);
-        var guard = 18;
+        var guard = MAX_DEAD_ZONE_RETRIES;
         while (layout[idx].type === 'dead' && guard-- > 0) idx = pickWeighted(layout);
         var result = layout[idx].type;
 

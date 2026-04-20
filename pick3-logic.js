@@ -9,6 +9,12 @@
     rare:      [0.001, 0.05, 0.32, 1.0, 2.2],
     legendary: [0.0002, 0.01, 0.12, 0.55, 1.6],
   };
+  var FLAT_BONUS_STACK_TO_COUNT = 100;
+  var FLAT_BONUS_STACK_TO_SIZE = 2;
+  var MIN_STACKABLE_COUNT = 1;
+  var MIN_DEAD_ZONE_SIZE = 0.1;
+  var MIN_ANCHOR_SCALE = 0.08;
+  var MIN_LOSE_TILE_MULT = 0.08;
 
   function rarityMult(rarity, gl) {
     var arr = RARITY_SCALE[rarity] || [1];
@@ -45,7 +51,11 @@
           var rolled = {};
           Object.keys(rangesByKey).forEach(function(k) {
             var rg = rarityRange(rarity, rangesByKey[k]);
-            var v = rg.step ? (Math.round(randFloat(rg.min, rg.max) / rg.step) * rg.step) : randFloat(rg.min, rg.max);
+            var v = randFloat(rg.min, rg.max);
+            if (rg.step) {
+              var steps = Math.floor((rg.max - rg.min) / rg.step);
+              v = rg.min + randInt(0, Math.max(0, steps)) * rg.step;
+            }
             if (rg.int) v = randInt(rg.min, rg.max);
             rolled[k] = v;
           });
@@ -401,8 +411,8 @@
     if (!boon.randomValue) return val;
     var fb = boon.flatBonus || 0;
     if (typeof val !== 'number') return val;
-    if (key === 'charges' || key === 'amount') return Math.max(1, Math.round(val + fb * 100));
-    if (key === 'size') return Math.max(0.1, val + fb * 2);
+    if (key === 'charges' || key === 'amount') return Math.max(MIN_STACKABLE_COUNT, Math.round(val + fb * FLAT_BONUS_STACK_TO_COUNT));
+    if (key === 'size') return Math.max(MIN_DEAD_ZONE_SIZE, val + fb * FLAT_BONUS_STACK_TO_SIZE);
     return clamp(val + fb, 0, 0.99);
   }
 
@@ -603,9 +613,10 @@
     }
 
     if (anchorShrink > 0) {
+      anchorShrink = clamp(anchorShrink, 0, 0.95);
       for (var j = 0; j < t2.length; j++) {
         if (t2[j].type === 'lose' && t2[j].anchored) {
-          t2[j].anchorScale = clamp((t2[j].anchorScale || 1) * (1 - anchorShrink), 0.08, 1);
+          t2[j].anchorScale = clamp((t2[j].anchorScale || 1) * (1 - anchorShrink), MIN_ANCHOR_SCALE, 1);
         }
       }
     }
@@ -619,7 +630,7 @@
       var b = boons[i];
       if (b.effect === 'tide_shift') {
         wm *= (1 + boonNumeric(b, 'winGrow'));
-        lm *= Math.max(0.08, 1 - boonNumeric(b, 'loseShrink'));
+        lm *= Math.max(MIN_LOSE_TILE_MULT, 1 - boonNumeric(b, 'loseShrink'));
       }
       if (b.effect === 'temp_win' && addTemp) tmp += boonNumeric(b, 'amount');
       if (b.effect === 'dead_zone' && addTemp) dead += boonNumeric(b, 'size');

@@ -113,6 +113,7 @@
     }
 
     function App() {
+      var MAX_DEAD_ZONE_RETRIES = 18;
       var _s1  = useState(INIT_TILES); var tiles = _s1[0]; var setTiles = _s1[1];
       var _s2  = useState([]);         var boons = _s2[0]; var setBoons = _s2[1];
       var _s3  = useState(0);          var sc    = _s3[0]; var setSc    = _s3[1];
@@ -170,7 +171,7 @@
         var layout = buildLayout(spinTiles, spinBoons, true);
         var angles = calcAngles(layout);
         var idx    = pickWeighted(layout);
-        var guard = 18;
+        var guard = MAX_DEAD_ZONE_RETRIES;
         while (layout[idx].type === 'dead' && guard-- > 0) idx = pickWeighted(layout);
         var tc     = angles[idx].center;
         var hs     = (angles[idx].end - angles[idx].start) / 2;
