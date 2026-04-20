@@ -88,6 +88,46 @@
       display: block;
     }
     #status { margin-top: 10px; color: #909090; font-size: .88rem; min-height: 1.2em; }
+    #runLog {
+      margin-top: 10px;
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid #252525;
+      border-radius: 4px;
+      background: #141414;
+      padding: 8px;
+    }
+    .run-row {
+      border: 1px solid #292929;
+      border-radius: 4px;
+      background: #1a1a1a;
+      margin-bottom: 6px;
+      padding: 6px;
+      font-size: .8rem;
+      line-height: 1.45;
+    }
+    .run-row-head {
+      color: #b7b7b7;
+      margin-bottom: 4px;
+    }
+    .run-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+    .run-pick-wrap {
+      display: inline-flex;
+      padding: 2px;
+      border: 2px solid #444;
+      border-radius: 6px;
+      background: #111;
+    }
+    .run-pick {
+      display: inline-block;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 2px 6px;
+      white-space: nowrap;
+      font-size: .76rem;
+      background: #181818;
+    }
+    .run-empty { color: #7a7a7a; font-style: italic; }
     @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } canvas { height: 420px; } }
   </style>
 </head>
@@ -109,6 +149,8 @@
         <div class="sub">Dot histogram: x = spins survived, y = runs ended · dot color: green = common boons, red = rare boons</div>
         <canvas id="plot" width="900" height="560" role="img" aria-label="Dot histogram of simulation runs. Horizontal axis is spins survived, vertical axis is number of runs that ended at that spin count. Each dot is colored green for runs with common boon picks and red for runs with rare boon picks."></canvas>
         <div id="status" role="status" aria-live="polite"></div>
+        <div class="sub" style="margin-top:10px;">Run debug: each picked boon is boxed by its own rarity, with an outer box showing the highest rarity offered in that shop</div>
+        <div id="runLog" role="log" aria-live="polite" aria-label="Simulation run log"></div>
       </div>
     </div>
   </div>
@@ -138,6 +180,7 @@
     var runsInput = document.getElementById('runsInput');
     var runBtn = document.getElementById('runBtn');
     var statusEl = document.getElementById('status');
+    var runLogEl = document.getElementById('runLog');
     var canvas = document.getElementById('plot');
     var ctx = canvas.getContext('2d');
 
@@ -160,14 +203,74 @@
     }
 
     function formatBoonMeta(boon) {
-      if (boon.desc) return boon.rarity + ' · ' + boon.desc;
-      if (!boon.valueRanges) return boon.rarity;
+      var parts = [boon.rarity];
+      if (boon.desc) parts.push(boon.desc);
+      if (!boon.valueRanges) return parts.join(' · ');
       var keys = Object.keys(boon.valueRanges);
-      if (!keys.length) return boon.rarity;
+      if (!keys.length) return parts.join(' · ');
       var ranges = keys.map(function(key) {
         return key + ': ' + formatBoonRange(boon.valueRanges[key]);
       }).join(', ');
-      return boon.rarity + ' · Range: ' + ranges;
+      parts.push('Range: ' + ranges);
+      return parts.join(' · ');
+    }
+
+    function highestShopRarity(choices) {
+      var best = 'common';
+      for (var i = 0; i < choices.length; i++) {
+        var rarity = choices[i].rarity || 'common';
+        if ((RARITY_RANK[rarity] || 0) > (RARITY_RANK[best] || 0)) best = rarity;
+      }
+      return best;
+    }
+
+    function makeRunRow(run, runNumber) {
+      var row = document.createElement('div');
+      row.className = 'run-row';
+
+      var head = document.createElement('div');
+      head.className = 'run-row-head';
+      head.textContent = 'Run #' + runNumber + ' · Spins: ' + run.spins + ' · Picks: ' + run.picks.length;
+      row.appendChild(head);
+
+      if (!run.picks.length) {
+        var empty = document.createElement('div');
+        empty.className = 'run-empty';
+        empty.textContent = 'No boons picked';
+        row.appendChild(empty);
+        return row;
+      }
+
+      var picksWrap = document.createElement('div');
+      picksWrap.className = 'run-picks';
+      run.picks.forEach(function(pick) {
+        var outer = document.createElement('span');
+        outer.className = 'run-pick-wrap';
+        outer.style.borderColor = RC[pick.shopHighestRarity] || '#444';
+
+        var inner = document.createElement('span');
+        inner.className = 'run-pick';
+        inner.style.borderColor = RC[pick.boon.rarity] || '#555';
+        inner.style.color = RC[pick.boon.rarity] || '#ddd';
+        inner.textContent = pick.boon.name;
+        inner.title =
+          'Picked: ' + formatBoonMeta(pick.boon) +
+          ' | Highest rarity offered this shop: ' + pick.shopHighestRarity;
+        outer.title = inner.title;
+        outer.appendChild(inner);
+        picksWrap.appendChild(outer);
+      });
+      row.appendChild(picksWrap);
+      return row;
+    }
+
+    function appendRunLogs(startInclusive, endExclusive) {
+      var frag = document.createDocumentFragment();
+      for (var i = startInclusive; i < endExclusive; i++) {
+        frag.appendChild(makeRunRow(results[i], i + 1));
+      }
+      runLogEl.appendChild(frag);
+      runLogEl.scrollTop = runLogEl.scrollHeight;
     }
 
     function cloneTiles() {
@@ -222,6 +325,7 @@
       var nid = 6;
       var shopsSeen = 0;
       var pickedVals = [];
+      var picks = [];
       // Safety cap prevents a pathological run from looping forever.
       var cap = SIMULATION_MAX_SPINS_PER_RUN;
 
@@ -246,6 +350,7 @@
 
         var shop = drawBoons(nChoices, gl, boons, { firstShop: shopsSeen === 0 });
         var choices = shop.choices;
+        var shopTopRarity = highestShopRarity(choices);
         boons = shop.boons;
         shopsSeen += 1;
         if (!choices.length) break;
@@ -256,6 +361,15 @@
         boons = applied.boons;
         nid = applied.nextId;
         pickedVals.push(picked.value);
+        picks.push({
+          boon: {
+            name: picked.boon.name,
+            rarity: picked.boon.rarity,
+            desc: picked.boon.desc,
+            valueRanges: picked.boon.valueRanges || null
+          },
+          shopHighestRarity: shopTopRarity
+        });
         if (applied.grew) gl += 1;
       }
 
@@ -264,7 +378,7 @@
         var sum = pickedVals.reduce(function(s, v) { return s + v; }, 0);
         avg = sum / pickedVals.length;
       }
-      return { spins: sc, avgBoonNumber: avg };
+      return { spins: sc, avgBoonNumber: avg, picks: picks };
     }
 
     function drawPlot(data) {
@@ -374,14 +488,17 @@
       var prioMap = getCurrentPriority();
       runBtn.disabled = true;
       statusEl.textContent = 'Running 0 / ' + totalRuns + '...';
+      runLogEl.innerHTML = '';
 
       function step() {
+        var prevDone = done;
         var frameStart = performance.now();
         while (done < totalRuns && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
           results.push(runSingle(prioMap));
           done += 1;
         }
         drawPlot(results);
+        if (done > prevDone) appendRunLogs(prevDone, done);
         statusEl.textContent = 'Running ' + done + ' / ' + totalRuns + '...';
         if (done < totalRuns) requestAnimationFrame(step);
         else {
