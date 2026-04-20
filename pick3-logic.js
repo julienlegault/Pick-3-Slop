@@ -492,8 +492,8 @@
     });
     var nonCommonPickStreak = Math.max(0, opts.nonCommonPickStreak || 0);
     if (nonCommonPickStreak >= COMMON_CATCHUP_MIN_STREAK) {
-      var extra = nonCommonPickStreak - (COMMON_CATCHUP_MIN_STREAK - 1);
-      var commonMult = Math.min(COMMON_CATCHUP_MAX_MULT, 1 + extra * COMMON_CATCHUP_PER_EXTRA_NON_COMMON);
+      var streakBeyondThreshold = nonCommonPickStreak - (COMMON_CATCHUP_MIN_STREAK - 1);
+      var commonMult = Math.min(COMMON_CATCHUP_MAX_MULT, 1 + streakBeyondThreshold * COMMON_CATCHUP_PER_EXTRA_NON_COMMON);
       rarityW.common *= commonMult;
     }
     return rarityW;
