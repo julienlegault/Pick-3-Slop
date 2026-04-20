@@ -80,18 +80,18 @@
     }
 
     const BOONS = [
-      { id:'w1', name:'Fortune Sliver',     rarity:'common',    w:30, desc:'Add 1 win tile to the wheel.',                                                        effect:'add_win',     amount:1 },
-      { id:'ls', name:'Diminished Doom',    rarity:'common',    w:25, desc:'Lose tiles are 30% smaller. Stacks multiplicatively.',                                 effect:'lose_shrink', mult:0.7 },
-      { id:'tw', name:'Phantom Tile',       rarity:'common',    w:20, desc:'Each spin: +1 temporary win tile (does not count toward wheel growth).',               effect:'temp_win',    amount:1 },
-      { id:'wg', name:'Gilded Fortune',     rarity:'uncommon',  w:6,  desc:'Win tiles are 30% larger. Stacks multiplicatively.',                                   effect:'win_grow',    mult:1.3 },
-      { id:'lb', name:'Lucky Break',        rarity:'uncommon',  w:5,  desc:'On a loss: 25% chance to win. Copies add +25% additively, capped at 80%.',             effect:'rescue_add',  chance:0.25 },
-      { id:'w2', name:'Twin Slivers',       rarity:'uncommon',  w:5,  desc:'Add 2 win tiles to the wheel.',                                                        effect:'add_win',     amount:2 },
-      { id:'ga', name:'Guardian Angel',     rarity:'rare',      w:3,  desc:'Next loss becomes a win. One-time use. Each copy is an independent charge.',           effect:'shield',      charges:1 },
-      { id:'wf', name:'Weighted Fate',      rarity:'rare',      w:3,  desc:'On a loss: 40% chance to win instead. Each copy triggers independently.',              effect:'rescue_mul',  chance:0.40 },
-      { id:'sc', name:'Spoiled for Choice', rarity:'rare',      w:2,  desc:'+1 boon choice per shop visit. Stacks.',                                               effect:'extra_choice' },
-      { id:'ft', name:'Fortunes Tide',      rarity:'legendary', w:1,  desc:'Win tiles 60% larger AND lose tiles 60% smaller. Stacks multiplicatively.',            effect:'tide' },
-      { id:'ec', name:'Echo Chamber',       rarity:'legendary', w:1,  desc:'Immediately duplicate a random boon in your collection.',                              effect:'duplicate' },
-      { id:'gf', name:'Gale Fortune',       rarity:'legendary', w:1,  desc:'Immediately add 5 win tiles to the wheel.',                                            effect:'add_win',     amount:5 },
+      { id:'w1', name:'Fortune Sliver',     rarity:'common',    w:30, desc:'Replace a lose tile with a win tile.',                                                  effect:'add_win',     amount:1 },
+      { id:'ls', name:'Diminished Doom',    rarity:'uncommon',  w:6,  desc:'Lose tiles are 30% smaller. Stacks multiplicatively.',                                  effect:'lose_shrink', mult:0.7 },
+      { id:'tw', name:'Phantom Tile',       rarity:'uncommon',  w:6,  desc:'Each spin: +1 temporary win tile (does not count toward wheel growth).',                effect:'temp_win',    amount:1 },
+      { id:'wg', name:'Gilded Fortune',     rarity:'uncommon',  w:6,  desc:'Win tiles are 30% larger. Stacks multiplicatively.',                                    effect:'win_grow',    mult:1.3 },
+      { id:'lb', name:'Lucky Break',        rarity:'uncommon',  w:5,  desc:'On a loss: 25% chance to win. Copies add +25% additively, capped at 80%.',              effect:'rescue_add',  chance:0.25 },
+      { id:'w2', name:'Twin Slivers',       rarity:'uncommon',  w:5,  desc:'Replace 2 lose tiles with win tiles.',                                                  effect:'add_win',     amount:2 },
+      { id:'ga', name:'Guardian Angel',     rarity:'rare',      w:3,  desc:'Next loss becomes a win. One-time use. Each copy is an independent charge.',            effect:'shield',      charges:1 },
+      { id:'wf', name:'Weighted Fate',      rarity:'rare',      w:3,  desc:'On a loss: 40% chance to win instead. Each copy triggers independently.',               effect:'rescue_mul',  chance:0.40 },
+      { id:'sc', name:'Spoiled for Choice', rarity:'rare',      w:2,  desc:'+1 boon choice per shop visit. Stacks.',                                                effect:'extra_choice' },
+      { id:'ft', name:'Fortunes Tide',      rarity:'legendary', w:1,  desc:'Win tiles 60% larger AND lose tiles 60% smaller. Stacks multiplicatively.',             effect:'tide' },
+      { id:'ec', name:'Echo Chamber',       rarity:'legendary', w:1,  desc:'Immediately duplicate a random boon in your collection.',                               effect:'duplicate' },
+      { id:'gf', name:'Gale Fortune',       rarity:'legendary', w:1,  desc:'Immediately replace 5 lose tiles with win tiles.',                                      effect:'add_win',     amount:5 },
     ];
     const TOTAL_W = BOONS.reduce((s, b) => s + b.w, 0);
     const RC = { common:'#909090', uncommon:'#4a9eff', rare:'#c060ff', legendary:'#D4AF37' };
@@ -191,7 +191,12 @@
       var b2 = boons.concat([Object.assign({}, boon)]);
       var id = nid;
       if (boon.effect === 'add_win') {
-        for (var i = 0; i < boon.amount; i++) t2.push({ id: id++, type: 'win' });
+        for (var i = 0; i < boon.amount; i++) {
+          var li = -1;
+          for (var k = 0; k < t2.length; k++) { if (t2[k].type === 'lose') { li = k; break; } }
+          if (li !== -1) { t2[li] = { id: t2[li].id, type: 'win' }; }
+          else { t2.push({ id: id++, type: 'win' }); }
+        }
       }
       if (boon.effect === 'duplicate' && boons.length > 0) {
         var src = boons[Math.floor(Math.random() * boons.length)];
