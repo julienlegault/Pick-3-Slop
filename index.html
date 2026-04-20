@@ -66,11 +66,13 @@
     const LAND = 90;
 
     // Rarity weight multipliers per growth level (index = growthLevel, capped at last)
+    // Level 0: commons dominate (~99%), rares/legendaries nearly impossible
+    // Each growth level gradually shifts probability toward rarer boons
     const RARITY_SCALE = {
-      common:    [8.0, 4.0, 2.0, 1.2, 1.0],
-      uncommon:  [1.0, 1.4, 1.9, 2.4, 2.8],
-      rare:      [0.08, 0.35, 0.9, 1.8, 2.8],
-      legendary: [0.03, 0.15, 0.5, 1.1, 1.8],
+      common:    [1.0,  0.9,  0.8,  0.6,  0.4],
+      uncommon:  [0.05, 0.22, 0.55, 1.1,  1.6],
+      rare:      [0.001, 0.05, 0.32, 1.0,  2.2],
+      legendary: [0.0002, 0.01, 0.12, 0.55, 1.6],
     };
     function rarityMult(rarity, gl) {
       const arr = RARITY_SCALE[rarity] || [1];
@@ -78,10 +80,10 @@
     }
 
     const BOONS = [
-      { id:'w1', name:'Fortune Sliver',     rarity:'common',    w:40, desc:'Add 1 win tile to the wheel.',                                                        effect:'add_win',     amount:1 },
+      { id:'w1', name:'Fortune Sliver',     rarity:'common',    w:30, desc:'Add 1 win tile to the wheel.',                                                        effect:'add_win',     amount:1 },
+      { id:'ls', name:'Diminished Doom',    rarity:'common',    w:25, desc:'Lose tiles are 30% smaller. Stacks multiplicatively.',                                 effect:'lose_shrink', mult:0.7 },
+      { id:'tw', name:'Phantom Tile',       rarity:'common',    w:20, desc:'Each spin: +1 temporary win tile (does not count toward wheel growth).',               effect:'temp_win',    amount:1 },
       { id:'wg', name:'Gilded Fortune',     rarity:'uncommon',  w:6,  desc:'Win tiles are 30% larger. Stacks multiplicatively.',                                   effect:'win_grow',    mult:1.3 },
-      { id:'ls', name:'Diminished Doom',    rarity:'uncommon',  w:6,  desc:'Lose tiles are 30% smaller. Stacks multiplicatively.',                                 effect:'lose_shrink', mult:0.7 },
-      { id:'tw', name:'Phantom Tile',       rarity:'uncommon',  w:6,  desc:'Each spin: +1 temporary win tile (does not count toward wheel growth).',               effect:'temp_win',    amount:1 },
       { id:'lb', name:'Lucky Break',        rarity:'uncommon',  w:5,  desc:'On a loss: 25% chance to win. Copies add +25% additively, capped at 80%.',             effect:'rescue_add',  chance:0.25 },
       { id:'w2', name:'Twin Slivers',       rarity:'uncommon',  w:5,  desc:'Add 2 win tiles to the wheel.',                                                        effect:'add_win',     amount:2 },
       { id:'ga', name:'Guardian Angel',     rarity:'rare',      w:3,  desc:'Next loss becomes a win. One-time use. Each copy is an independent charge.',           effect:'shield',      charges:1 },
@@ -448,8 +450,12 @@
 
             {/* Boon stack */}
             {boons.length > 0 && (
-              <div style={{ marginTop: '16px', width: '100%', maxWidth: '760px' }}>
-                <div style={{ fontSize: '.56rem', letterSpacing: '.42em', color: '#1c1c1c', marginBottom: '6px' }}>
+              <div style={{
+                marginTop: '16px', width: '100%', maxWidth: '760px',
+                background: 'rgba(8,8,8,0.9)', border: '1px solid #1e1e1e',
+                borderRadius: '4px', padding: '10px 14px',
+              }}>
+                <div style={{ fontSize: '.56rem', letterSpacing: '.42em', color: '#444', marginBottom: '6px' }}>
                   BOON STACK &mdash; HOVER OR CLICK TO INSPECT
                 </div>
                 <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
@@ -466,6 +472,7 @@
             <div style={{
               position: 'fixed', inset: 0, zIndex: 40, pointerEvents: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.65)',
             }}>
               <div style={{ animation: 'tileReveal .54s cubic-bezier(0.22, 1, 0.36, 1) both' }}>
                 <svg width={310} height={260} overflow="visible">
