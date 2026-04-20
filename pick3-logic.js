@@ -15,6 +15,9 @@
   var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
   var MIN_LOSE_TILE_MULT = 0.08;
+  var COMMON_CATCHUP_MIN_STREAK = 2;
+  var COMMON_CATCHUP_PER_EXTRA_NON_COMMON = 0.45;
+  var COMMON_CATCHUP_MAX_MULT = 3.0;
   // Wheel-growth difficulty curve: early wheels are forgiving, then trend harder over time.
   var WHEEL_GROWTH_MULTIPLIER = 3;
   var EARLY_GROWTH_LEVEL_LIMIT = 3;
@@ -475,7 +478,8 @@
     return pool[pool.length - 1];
   }
 
-  function computeRarityWeights(gl, boons) {
+  function computeRarityWeights(gl, boons, options) {
+    var opts = options || {};
     var rarityW = {};
     RARITY_ORDER.forEach(function(r) {
       var base = BOONS.filter(function(b) { return b.rarity === r; }).reduce(function(s, b) { return s + b.w; }, 0);
@@ -485,6 +489,12 @@
       });
       rarityW[r] = base * rarityMult(r, gl) * Math.max(0, 1 + bonus);
     });
+    var nonCommonPickStreak = Math.max(0, opts.nonCommonPickStreak || 0);
+    if (nonCommonPickStreak >= COMMON_CATCHUP_MIN_STREAK) {
+      var extra = nonCommonPickStreak - (COMMON_CATCHUP_MIN_STREAK - 1);
+      var commonMult = Math.min(COMMON_CATCHUP_MAX_MULT, 1 + extra * COMMON_CATCHUP_PER_EXTRA_NON_COMMON);
+      rarityW.common *= commonMult;
+    }
     return rarityW;
   }
 
@@ -548,7 +558,7 @@
     var forcedGroup = consumed.forcedGroup;
     var firstShopGuarantee = opts.firstShop === true;
 
-    var rarityW = computeRarityWeights(gl, nb);
+    var rarityW = computeRarityWeights(gl, nb, opts);
     var out = [];
     for (var n = 0; n < count; n++) {
       var tpl = null;
@@ -602,10 +612,10 @@
     return { ok: false, boons: nb };
   }
 
-  function rerollShop(count, gl, boons) {
+  function rerollShop(count, gl, boons, options) {
     var used = consumeShopReroll(boons, gl);
     if (!used.ok) return { ok: false, choices: [], boons: boons };
-    var drawn = drawBoons(count, gl, used.boons);
+    var drawn = drawBoons(count, gl, used.boons, options);
     return { ok: true, choices: drawn.choices, boons: drawn.boons };
   }
 
@@ -636,9 +646,10 @@
 
   function prepareSpin(tiles, boons) {
     var t2 = tiles.map(function(t) { return Object.assign({}, t); });
+    var b2 = boons.map(function(b) { return Object.assign({}, b); });
     var mergeGrow = 0;
     var anchorShrink = 0;
-    boons.forEach(function(b) {
+    b2.forEach(function(b) {
       if (b.effect === 'win_merge') mergeGrow += boonNumeric(b, 'mergeGrow');
       if (b.effect === 'anchor_lose') anchorShrink += boonNumeric(b, 'shrinkPerSpin');
     });
@@ -657,14 +668,35 @@
 
     if (anchorShrink > 0) {
       anchorShrink = clamp(anchorShrink, 0, 0.95);
+      var expiredAnchorCount = 0;
       for (var j = 0; j < t2.length; j++) {
         if (t2[j].type === 'lose' && t2[j].anchored) {
-          t2[j].anchorScale = clamp((t2[j].anchorScale || 1) * (1 - anchorShrink), MIN_ANCHOR_SCALE, 1);
+          var nextScale = clamp((t2[j].anchorScale || 1) * (1 - anchorShrink), MIN_ANCHOR_SCALE, 1);
+          t2[j].anchorScale = nextScale;
+          if (nextScale <= MIN_ANCHOR_SCALE + 1e-9) {
+            var unlocked = Object.assign({}, t2[j]);
+            delete unlocked.anchored;
+            delete unlocked.anchorScale;
+            t2[j] = unlocked;
+            expiredAnchorCount += 1;
+          }
         }
+      }
+      while (expiredAnchorCount > 0) {
+        var removed = false;
+        for (var k = 0; k < b2.length; k++) {
+          if (b2[k].effect === 'anchor_lose') {
+            b2.splice(k, 1);
+            removed = true;
+            break;
+          }
+        }
+        if (!removed) break;
+        expiredAnchorCount -= 1;
       }
     }
 
-    return { tiles: t2, boons: boons };
+    return { tiles: t2, boons: b2 };
   }
 
   function buildLayout(tiles, boons, addTemp) {
@@ -932,6 +964,7 @@
       if (bonusWins > 0) {
         flippedIds = flippedIds.concat(convertLoseToWin(t2, bonusWins));
       }
+      b2 = b2.filter(function(b) { return b.effect !== 'tide_shift'; });
     }
 
     b2 = applyValueAuraOnPick(b2, picked);
