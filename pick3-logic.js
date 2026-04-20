@@ -709,73 +709,90 @@
     return layout.length - 1;
   }
 
+  function rescueToken(b, idx) {
+    return b.iid || (b.id ? b.id + '_' + idx : 'boon_' + idx);
+  }
+
   function tryRescue(boons) {
     var nb = boons.map(function(b) { return Object.assign({}, b); });
-
-    for (var i = 0; i < nb.length; i++) {
-      if (nb[i].effect === 'shield' && (nb[i].charges || 0) > 0) {
-        nb = consumeProtected(nb, i);
-        return { ok: true, boons: nb };
-      }
-    }
-
-    for (var j = 0; j < nb.length; j++) {
-      if (nb[j].effect === 'rescue_independent' && Math.random() < boonNumeric(nb[j], 'chance')) {
-        return { ok: true, boons: nb };
-      }
-    }
-
+    var triggered = [];
     var addP = 0, addCap = 0;
-    nb.forEach(function(b) {
-      if (b.effect === 'rescue_additive') {
-        addP += boonNumeric(b, 'chance');
-        addCap = Math.max(addCap, boonNumeric(b, 'cap'));
-      }
-    });
-    if (addP > 0 && Math.random() < clamp(addP, 0, addCap || 0.95)) return { ok: true, boons: nb };
-
     var failMul = 1;
     var hasMul = false;
-    nb.forEach(function(b) {
+
+    for (var i = 0; i < nb.length; i++) {
+      var b = nb[i];
+      var token = rescueToken(b, i);
+
+      if (b.effect === 'shield' && (b.charges || 0) > 0) {
+        triggered.push(token);
+        nb = consumeProtected(nb, i);
+        return { ok: true, boons: nb, triggered: triggered, winBy: 'shield' };
+      }
+
+      if (b.effect === 'rescue_independent') {
+        triggered.push(token);
+        if (Math.random() < boonNumeric(b, 'chance')) {
+          return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_independent' };
+        }
+      }
+
+      if (b.effect === 'rescue_additive') {
+        triggered.push(token);
+        addP += boonNumeric(b, 'chance');
+        addCap = Math.max(addCap, boonNumeric(b, 'cap'));
+        if (Math.random() < clamp(addP, 0, addCap || 0.95)) {
+          return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_additive' };
+        }
+      }
+
       if (b.effect === 'rescue_multiplicative') {
+        triggered.push(token);
         hasMul = true;
         failMul *= (1 - boonNumeric(b, 'chance'));
+        if (Math.random() < clamp(1 - failMul, 0, 0.995)) {
+          return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_multiplicative' };
+        }
       }
-    });
-    if (hasMul && Math.random() < clamp(1 - failMul, 0, 0.995)) return { ok: true, boons: nb };
 
-    for (var k = 0; k < nb.length; k++) {
-      if (nb[k].effect === 'rescue_fragile' && Math.random() < boonNumeric(nb[k], 'chance')) {
-        if (Math.random() < boonNumeric(nb[k], 'breakChance')) nb = consumeProtected(nb, k);
-        return { ok: true, boons: nb };
+      if (b.effect === 'rescue_fragile') {
+        triggered.push(token);
+        if (Math.random() < boonNumeric(b, 'chance')) {
+          if (Math.random() < boonNumeric(b, 'breakChance')) nb = consumeProtected(nb, i);
+          return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_fragile' };
+        }
       }
-    }
 
-    for (var s = 0; s < nb.length; s++) {
-      if (nb[s].effect === 'sacrifice_instead') {
+      if (b.effect === 'sacrifice_instead') {
+        triggered.push(token);
         var candidates = [];
-        for (var c = 0; c < nb.length; c++) if (c !== s) candidates.push(c);
-        var idx = candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : s;
+        for (var c = 0; c < nb.length; c++) if (c !== i) candidates.push(c);
+        var idx = candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : i;
         nb.splice(idx, 1);
-        return { ok: true, boons: nb };
+        return { ok: true, boons: nb, triggered: triggered, winBy: 'sacrifice_instead' };
       }
     }
 
-    return { ok: false, boons: nb };
+    return { ok: false, boons: nb, triggered: triggered, winBy: null };
   }
 
   function convertLoseToWin(t2, amount) {
+    var flipped = [];
     for (var i = 0; i < amount; i++) {
       var li = -1;
       for (var k = 0; k < t2.length; k++) {
         if (t2[k].type === 'lose' && !t2[k].anchored) { li = k; break; }
       }
       if (li !== -1) {
+        flipped.push(t2[li].id);
         t2[li] = { id: t2[li].id, type: 'win' };
       } else {
-        t2.push({ id: '_x' + Date.now() + '_' + i, type: 'win' });
+        var id = '_x' + Date.now() + '_' + i;
+        t2.push({ id: id, type: 'win' });
+        flipped.push(id);
       }
     }
+    return flipped;
   }
 
   function applyValueAuraOnPick(allBoons, picked) {
@@ -851,6 +868,7 @@
     if (picked.randomValue && picked.flatBonus === undefined) picked.flatBonus = 0;
     var b2 = boons.concat([picked]);
     var id = nid;
+    var flippedIds = [];
 
     if (picked.effect === 'temp_win') {
       // Passive, no immediate tile change.
@@ -889,9 +907,15 @@
       if (pool.length > 0) b2[cidx] = instantiateTemplate(pick(pool));
     }
 
-    // Legacy add-win support for compatibility if any existing boon still has it.
-    if (picked.effect === 'add_win') {
-      convertLoseToWin(t2, picked.amount || 1);
+    var keptBoons = [];
+    var pendingAddWins = 0;
+    b2.forEach(function(b) {
+      if (b.effect === 'add_win') pendingAddWins += boonNumeric(b, 'amount') || b.amount || 1;
+      else keptBoons.push(b);
+    });
+    b2 = keptBoons;
+    if (pendingAddWins > 0) {
+      flippedIds = flippedIds.concat(convertLoseToWin(t2, pendingAddWins));
     }
 
     var grew = t2.every(function(t) { return t.type === 'win'; });
@@ -905,13 +929,15 @@
 
       var bonusWins = 0;
       b2.forEach(function(b) { if (b.effect === 'growth_bonus_win') bonusWins += boonNumeric(b, 'amount'); });
-      convertLoseToWin(t2, bonusWins);
+      if (bonusWins > 0) {
+        flippedIds = flippedIds.concat(convertLoseToWin(t2, bonusWins));
+      }
     }
 
     b2 = applyValueAuraOnPick(b2, picked);
     b2 = maybeFreeCopy(b2, picked);
 
-    return { tiles: t2, boons: b2, nextId: id, grew: grew };
+    return { tiles: t2, boons: b2, nextId: id, grew: grew, flippedIds: flippedIds };
   }
 
   global.Pick3Logic = {
