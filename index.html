@@ -152,21 +152,42 @@
       return layout.length - 1;
     }
     function drawBoons(count, gl) {
-      var scaledW = BOONS.map(function(b) { return b.w * rarityMult(b.rarity, gl); });
-      var total = scaledW.reduce(function(s, w) { return s + w; }, 0);
-      var out = [], used = {};
-      for (var tries = 0; tries < 600 && out.length < count; tries++) {
-        var r = Math.random() * total;
-        for (var i = 0; i < BOONS.length; i++) {
-          r -= scaledW[i];
-          if (r <= 0) {
-            if (!used[i]) {
-              used[i] = true;
-              out.push(Object.assign({}, BOONS[i], { iid: BOONS[i].id + '_' + Date.now() + '_' + out.length }));
-            }
+      var rarityOrder = ['common', 'uncommon', 'rare', 'legendary'];
+      var byRarity = { common: [], uncommon: [], rare: [], legendary: [] };
+      for (var i = 0; i < BOONS.length; i++) byRarity[BOONS[i].rarity].push(BOONS[i]);
+
+      var rarityW = rarityOrder.map(function(r) {
+        var base = byRarity[r].reduce(function(s, b) { return s + b.w; }, 0);
+        return base * rarityMult(r, gl);
+      });
+      var rarityTotal = rarityW.reduce(function(s, w) { return s + w; }, 0);
+      if (rarityTotal <= 0) return [];
+
+      var out = [];
+      for (var n = 0; n < count; n++) {
+        var rr = Math.random() * rarityTotal;
+        var pickedRarity = rarityOrder[rarityOrder.length - 1];
+        for (var rix = 0; rix < rarityOrder.length; rix++) {
+          rr -= rarityW[rix];
+          if (rr <= 0) {
+            pickedRarity = rarityOrder[rix];
             break;
           }
         }
+
+        var pool = byRarity[pickedRarity];
+        var poolTotal = pool.reduce(function(s, b) { return s + b.w; }, 0);
+        var rb = Math.random() * poolTotal;
+        var chosen = pool[pool.length - 1];
+        for (var pix = 0; pix < pool.length; pix++) {
+          rb -= pool[pix].w;
+          if (rb <= 0) {
+            chosen = pool[pix];
+            break;
+          }
+        }
+
+        out.push(Object.assign({}, chosen, { iid: chosen.id + '_' + Date.now() + '_' + n + '_' + Math.random().toString(36).slice(2, 8) }));
       }
       return out;
     }
