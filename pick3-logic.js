@@ -14,6 +14,7 @@
   var MIN_STACKABLE_COUNT = 1;
   var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
+  var ANCHOR_SCALE_EPSILON = 1e-9;
   var MIN_LOSE_TILE_MULT = 0.08;
   var COMMON_CATCHUP_MIN_STREAK = 2;
   var COMMON_CATCHUP_PER_EXTRA_NON_COMMON = 0.45;
@@ -673,7 +674,7 @@
         if (t2[j].type === 'lose' && t2[j].anchored) {
           var nextScale = clamp((t2[j].anchorScale || 1) * (1 - anchorShrink), MIN_ANCHOR_SCALE, 1);
           t2[j].anchorScale = nextScale;
-          if (nextScale <= MIN_ANCHOR_SCALE + 1e-9) {
+          if (nextScale <= MIN_ANCHOR_SCALE + ANCHOR_SCALE_EPSILON) {
             var unlocked = Object.assign({}, t2[j]);
             delete unlocked.anchored;
             delete unlocked.anchorScale;
