@@ -142,6 +142,7 @@
 
     var dragItem = null;
     var results = [];
+    var CHART_LINE_COLOR = '#D4AF37';
     var boonById = BASE_BOONS.reduce(function(map, boon) {
       map[boon.id] = boon;
       return map;
@@ -321,7 +322,7 @@
         return;
       }
 
-      ctx.strokeStyle = '#D4AF37';
+      ctx.strokeStyle = CHART_LINE_COLOR;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       for (var k = 0; k < curvePoints.length; k++) {
