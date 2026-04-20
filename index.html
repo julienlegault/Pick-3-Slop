@@ -124,6 +124,7 @@
       var _s8  = useState(null);       var rtile = _s8[0]; var setRtile = _s8[1];
       var _s9  = useState([]);         var choices = _s9[0]; var setChoices = _s9[1];
       var _s10 = useState(6);          var nid   = _s10[0]; var setNid   = _s10[1];
+      var _s11 = useState(0);          var shopsSeen = _s11[0]; var setShopsSeen = _s11[1];
 
       var spinRef = useRef(null);
       var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null);
@@ -139,9 +140,10 @@
         clearTimeout(t2.current);
         var d = spinRef.current;
         if (d.result === 'win') {
-          var shop = drawBoons(d.nc, d.gl, d.fb, { firstShop: d.firstShop });
+          var shop = drawBoons(d.nc, d.gl, d.fb, { firstShop: d.shopsSeen === 0 });
           setBoons(shop.boons);
           setChoices(shop.choices);
+          setShopsSeen(function(n) { return n + 1; });
           setPhase('boon_select');
         }
         else setPhase('game_over');
@@ -186,13 +188,13 @@
           fb = res.boons;
         }
 
-        spinRef.current = { targetDeg: target, result: result, fb: fb, nc: nChoices, halfSpan: hs, gl: gl, firstShop: sc === 0 && boons.length === 0 };
+        spinRef.current = { targetDeg: target, result: result, fb: fb, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen };
         doneRef.current = false;
         setAnim(true);
         setWdeg(target);
         setPhase('spinning');
         t1.current = setTimeout(finish, 3500);
-      }, [phase, tiles, boons, wdeg, nChoices, gl, finish]);
+      }, [phase, tiles, boons, wdeg, nChoices, gl, shopsSeen, finish]);
 
       var handleClick = useCallback(function() {
         if (phase === 'spinning') finish();
@@ -200,7 +202,7 @@
       }, [phase, finish, advance]);
 
       var pick = useCallback(function(boon) {
-        var res = applyBoon(boon, tiles, boons, nid, gl);
+        var res = applyBoon(boon, tiles, boons, nid);
         setTiles(res.tiles);
         setBoons(res.boons);
         setNid(res.nextId);
@@ -230,7 +232,7 @@
         setTiles(INIT_TILES);
         setBoons([]); setSc(0); setGl(0); setPhase('idle');
         setWdeg(0); setAnim(false); setRtile(null);
-        setChoices([]); setNid(6);
+        setChoices([]); setNid(6); setShopsSeen(0);
       }, []);
 
       var dl   = buildLayout(tiles, boons, false);

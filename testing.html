@@ -220,6 +220,7 @@
       var sc = 0;
       var gl = 0;
       var nid = 6;
+      var shopsSeen = 0;
       var pickedVals = [];
       // Safety cap prevents a pathological run from looping forever.
       var cap = SIMULATION_MAX_SPINS_PER_RUN;
@@ -243,13 +244,14 @@
         }
         if (result === 'lose') break;
 
-        var shop = drawBoons(nChoices, gl, boons, { firstShop: sc === 1 && boons.length === 0 });
+        var shop = drawBoons(nChoices, gl, boons, { firstShop: shopsSeen === 0 });
         var choices = shop.choices;
         boons = shop.boons;
+        shopsSeen += 1;
         if (!choices.length) break;
 
         var picked = chooseByPriority(choices, prioMap);
-        var applied = applyBoon(picked.boon, tiles, boons, nid, gl);
+        var applied = applyBoon(picked.boon, tiles, boons, nid);
         tiles = applied.tiles;
         boons = applied.boons;
         nid = applied.nextId;

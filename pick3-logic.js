@@ -830,7 +830,17 @@
     return { tiles: out, nextId: nextId };
   }
 
-  function applyBoon(boon, tiles, boons, nid, growthLevel) {
+  function inferGrowthLevelFromTileCount(tileCount) {
+    var level = 0;
+    var size = INIT_TILES.length;
+    while (size < tileCount) {
+      size *= 3;
+      level += 1;
+    }
+    return level;
+  }
+
+  function applyBoon(boon, tiles, boons, nid) {
     var t2 = tiles.slice();
     var picked = Object.assign({}, boon, { iid: boon.iid || makeIid(boon.id) });
     if (picked.randomValue && picked.flatBonus === undefined) picked.flatBonus = 0;
@@ -882,7 +892,8 @@
     var grew = t2.every(function(t) { return t.type === 'win'; });
     if (grew) {
       var n = t2.length;
-      var ratio = growthWinRatio(Number.isFinite(growthLevel) ? growthLevel : 0);
+      var priorGrowthLevel = inferGrowthLevelFromTileCount(n);
+      var ratio = growthWinRatio(priorGrowthLevel);
       var grown = buildGrowthTiles(n * 3, ratio, id);
       t2 = grown.tiles;
       id = grown.nextId;
