@@ -15,6 +15,11 @@
   var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
   var MIN_LOSE_TILE_MULT = 0.08;
+  var EARLY_GROWTH_LEVEL_LIMIT = 3;
+  var MID_GROWTH_LEVEL_LIMIT = 5;
+  var EARLY_GROWTH_WIN_RATIO = 2 / 3;
+  var MID_GROWTH_WIN_RATIO = 5 / 9;
+  var MIN_GROWTH_WIN_RATIO = 1 / 3;
   var GROWTH_WIN_RATIO_STEP = 1 / 18;
 
   function rarityMult(rarity, gl) {
@@ -801,10 +806,10 @@
   }
 
   function growthWinRatio(growthLevel) {
-    if (growthLevel < 3) return 2 / 3;
-    if (growthLevel < 5) return 5 / 9;
-    var reduced = (5 / 9) - ((growthLevel - 4) * GROWTH_WIN_RATIO_STEP);
-    return clamp(reduced, 1 / 3, 5 / 9);
+    if (growthLevel < EARLY_GROWTH_LEVEL_LIMIT) return EARLY_GROWTH_WIN_RATIO;
+    if (growthLevel < MID_GROWTH_LEVEL_LIMIT) return MID_GROWTH_WIN_RATIO;
+    var reduced = MID_GROWTH_WIN_RATIO - ((growthLevel - (MID_GROWTH_LEVEL_LIMIT - 1)) * GROWTH_WIN_RATIO_STEP);
+    return clamp(reduced, MIN_GROWTH_WIN_RATIO, MID_GROWTH_WIN_RATIO);
   }
 
   function buildGrowthTiles(size, winRatio, startId) {
