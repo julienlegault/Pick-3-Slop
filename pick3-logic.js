@@ -676,7 +676,7 @@
         if (t2[j].type === 'lose' && t2[j].anchored) {
           var nextScale = clamp((t2[j].anchorScale || 1) * (1 - anchorShrink), MIN_ANCHOR_SCALE, 1);
           t2[j].anchorScale = nextScale;
-          if (nextScale <= MIN_ANCHOR_SCALE + ANCHOR_SCALE_EPSILON) {
+          if (nextScale <= MIN_ANCHOR_SCALE + ANCHOR_SCALE_EPSILON) { // epsilon guards float precision near clamp floor
             expiredAnchorTileIdx.push(j);
           }
         }
@@ -692,11 +692,11 @@
         delete unlocked.anchorScale;
         t2[ti] = unlocked;
       }
-      var removableAnchorBoonIdx = anchorBoonIdx
+      var removableAnchorBoonIndices = anchorBoonIdx
         .slice(0, anchorExpirationsToProcess)
         .sort(function(a, b) { return b - a; });
-      for (var bi = 0; bi < removableAnchorBoonIdx.length; bi++) {
-        var removeAt = removableAnchorBoonIdx[bi];
+      for (var bi = 0; bi < removableAnchorBoonIndices.length; bi++) {
+        var removeAt = removableAnchorBoonIndices[bi];
         if (removeAt >= 0 && removeAt < b2.length) {
           b2.splice(removeAt, 1);
         }
