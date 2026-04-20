@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pick 3 Slop - Testing</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      font-family: Georgia, serif;
+      padding: 20px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 {
+      margin: 0 0 12px;
+      letter-spacing: .15em;
+      color: #D4AF37;
+      font-family: 'Cinzel', serif;
+      font-size: 1.45rem;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    input, button {
+      background: #141414;
+      color: #ddd;
+      border: 1px solid #2a2a2a;
+      padding: 10px 12px;
+      border-radius: 4px;
+      font-size: .95rem;
+    }
+    button { cursor: pointer; border-color: #D4AF37; color: #D4AF37; }
+    .grid {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .panel {
+      background: #111;
+      border: 1px solid #252525;
+      border-radius: 6px;
+      padding: 12px;
+    }
+    .sub {
+      margin: 0 0 8px;
+      font-size: .78rem;
+      color: #888;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-family: 'Cinzel', serif;
+    }
+    #boonList {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 68vh;
+      overflow: auto;
+    }
+    #boonList li {
+      margin-bottom: 6px;
+      border: 1px solid #2f2f2f;
+      border-radius: 4px;
+      padding: 8px;
+      background: #181818;
+      cursor: grab;
+      user-select: none;
+    }
+    #boonList li.dragging { opacity: .35; }
+    #boonList .row { display: flex; justify-content: space-between; gap: 8px; }
+    #boonList .meta { font-size: .75rem; color: #777; margin-top: 3px; }
+    canvas {
+      width: 100%;
+      height: 560px;
+      border: 1px solid #2a2a2a;
+      background: #0d0d0d;
+      border-radius: 6px;
+      display: block;
+    }
+    #status { margin-top: 10px; color: #909090; font-size: .88rem; min-height: 1.2em; }
+    @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } canvas { height: 420px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>PICK 3 SLOP — TESTING</h1>
+    <div class="controls">
+      <input id="runsInput" type="number" min="1" step="1" value="500" />
+      <button id="runBtn">Run Simulation</button>
+      <a href="./index.html" style="color:#6ea8ff;text-align:right;">Back to game</a>
+    </div>
+    <div class="grid">
+      <div class="panel">
+        <div class="sub">Boon Priority (top = highest preference)</div>
+        <ul id="boonList"></ul>
+      </div>
+      <div class="panel">
+        <div class="sub">Scatter plot: x = spins survived, y = average boon number</div>
+        <canvas id="plot" width="900" height="560"></canvas>
+        <div id="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./pick3-logic.js"></script>
+  <script>
+    var BOONS = window.Pick3Logic.BOONS;
+    var INIT_TILES = window.Pick3Logic.INIT_TILES;
+    var buildLayout = window.Pick3Logic.buildLayout;
+    var pickWeighted = window.Pick3Logic.pickWeighted;
+    var drawBoons = window.Pick3Logic.drawBoons;
+    var tryRescue = window.Pick3Logic.tryRescue;
+    var applyBoon = window.Pick3Logic.applyBoon;
+    var RC = window.Pick3Logic.RC;
+
+    var boonList = document.getElementById('boonList');
+    var runsInput = document.getElementById('runsInput');
+    var runBtn = document.getElementById('runBtn');
+    var statusEl = document.getElementById('status');
+    var canvas = document.getElementById('plot');
+    var ctx = canvas.getContext('2d');
+
+    var dragItem = null;
+    var results = [];
+
+    function cloneTiles() {
+      return INIT_TILES.map(function(t) { return { id: t.id, type: t.type }; });
+    }
+
+    function renderBoonList() {
+      boonList.innerHTML = '';
+      for (var i = 0; i < BOONS.length; i++) {
+        var b = BOONS[i];
+        var li = document.createElement('li');
+        li.draggable = true;
+        li.dataset.id = b.id;
+        li.innerHTML =
+          '<div class="row">' +
+            '<strong style="color:' + RC[b.rarity] + '">' + (i + 1) + '. ' + b.name + '</strong>' +
+            '<span style="color:#aaa">value ' + (BOONS.length - i) + '</span>' +
+          '</div>' +
+          '<div class="meta">' + b.rarity + ' · ' + b.desc + '</div>';
+        boonList.appendChild(li);
+      }
+    }
+
+    function getCurrentPriority() {
+      var ids = Array.prototype.map.call(boonList.querySelectorAll('li'), function(li) { return li.dataset.id; });
+      var map = {};
+      for (var i = 0; i < ids.length; i++) {
+        map[ids[i]] = ids.length - i;
+      }
+      return map;
+    }
+
+    function chooseByPriority(choices, prioMap) {
+      var best = choices[0];
+      var bestVal = prioMap[best.id] || 0;
+      for (var i = 1; i < choices.length; i++) {
+        var c = choices[i];
+        var val = prioMap[c.id] || 0;
+        if (val > bestVal) {
+          best = c;
+          bestVal = val;
+        }
+      }
+      return { boon: best, value: bestVal };
+    }
+
+    function runSingle(prioMap) {
+      var tiles = cloneTiles();
+      var boons = [];
+      var sc = 0;
+      var gl = 0;
+      var nid = 6;
+      var pickedVals = [];
+      var cap = 20000;
+
+      while (cap-- > 0) {
+        sc += 1;
+        var nChoices = 3 + boons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
+        var layout = buildLayout(tiles, boons, true);
+        var idx = pickWeighted(layout);
+        var result = layout[idx].type;
+
+        if (result === 'lose') {
+          var res = tryRescue(boons);
+          result = res.ok ? 'win' : 'lose';
+          boons = res.boons;
+        }
+        if (result === 'lose') break;
+
+        var choices = drawBoons(nChoices, gl);
+        if (!choices.length) break;
+
+        var picked = chooseByPriority(choices, prioMap);
+        var applied = applyBoon(picked.boon, tiles, boons, nid);
+        tiles = applied.tiles;
+        boons = applied.boons;
+        nid = applied.nextId;
+        pickedVals.push(picked.value);
+        if (applied.grew) gl += 1;
+      }
+
+      var avg = 0;
+      if (pickedVals.length) {
+        var sum = pickedVals.reduce(function(s, v) { return s + v; }, 0);
+        avg = sum / pickedVals.length;
+      }
+      return { spins: sc, avgBoonNumber: avg };
+    }
+
+    function drawPlot(data) {
+      var w = canvas.width, h = canvas.height;
+      var ml = 56, mr = 18, mt = 18, mb = 46;
+      var pw = w - ml - mr;
+      var ph = h - mt - mb;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#0d0d0d';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = '#404040';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ml, mt);
+      ctx.lineTo(ml, h - mb);
+      ctx.lineTo(w - mr, h - mb);
+      ctx.stroke();
+
+      if (!data.length) return;
+
+      var xMax = Math.max(1, data.reduce(function(m, d) { return Math.max(m, d.spins); }, 0));
+      var yMax = Math.max(1, BOONS.length);
+      var yStep = 1;
+      var xTicks = 8;
+
+      ctx.fillStyle = '#7a7a7a';
+      ctx.font = '12px monospace';
+
+      for (var i = 0; i <= xTicks; i++) {
+        var xv = (xMax / xTicks) * i;
+        var x = ml + (xv / xMax) * pw;
+        ctx.strokeStyle = '#222';
+        ctx.beginPath();
+        ctx.moveTo(x, mt);
+        ctx.lineTo(x, h - mb);
+        ctx.stroke();
+        ctx.fillText(String(Math.round(xv)), x - 8, h - mb + 16);
+      }
+
+      for (var y = 0; y <= yMax; y += yStep) {
+        var py = h - mb - (y / yMax) * ph;
+        ctx.strokeStyle = '#1f1f1f';
+        ctx.beginPath();
+        ctx.moveTo(ml, py);
+        ctx.lineTo(w - mr, py);
+        ctx.stroke();
+        ctx.fillText(String(y), 24, py + 4);
+      }
+
+      ctx.fillStyle = '#9f9f9f';
+      ctx.fillText('Spins survived', ml + pw / 2 - 40, h - 12);
+      ctx.save();
+      ctx.translate(14, mt + ph / 2 + 50);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('Average boon number', 0, 0);
+      ctx.restore();
+
+      for (var j = 0; j < data.length; j++) {
+        var d = data[j];
+        var dx = ml + (d.spins / xMax) * pw;
+        var dy = h - mb - (Math.min(d.avgBoonNumber, yMax) / yMax) * ph;
+        ctx.fillStyle = 'rgba(212,175,55,0.6)';
+        ctx.beginPath();
+        ctx.arc(dx, dy, 2.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function runSimulation(totalRuns) {
+      results = [];
+      var done = 0;
+      var prioMap = getCurrentPriority();
+      runBtn.disabled = true;
+      statusEl.textContent = 'Running 0 / ' + totalRuns + '...';
+
+      function step() {
+        var frameStart = performance.now();
+        while (done < totalRuns && performance.now() - frameStart < 25) {
+          results.push(runSingle(prioMap));
+          done += 1;
+        }
+        drawPlot(results);
+        statusEl.textContent = 'Running ' + done + ' / ' + totalRuns + '...';
+        if (done < totalRuns) requestAnimationFrame(step);
+        else {
+          var avgSpins = results.reduce(function(s, r) { return s + r.spins; }, 0) / results.length;
+          var avgBoon = results.reduce(function(s, r) { return s + r.avgBoonNumber; }, 0) / results.length;
+          statusEl.textContent =
+            'Done. Runs: ' + totalRuns +
+            ' | Avg spins: ' + avgSpins.toFixed(2) +
+            ' | Avg boon number: ' + avgBoon.toFixed(2);
+          runBtn.disabled = false;
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    boonList.addEventListener('dragstart', function(e) {
+      var li = e.target.closest('li');
+      if (!li) return;
+      dragItem = li;
+      li.classList.add('dragging');
+    });
+    boonList.addEventListener('dragend', function(e) {
+      var li = e.target.closest('li');
+      if (li) li.classList.remove('dragging');
+      dragItem = null;
+      BOONS = Array.prototype.map.call(boonList.querySelectorAll('li'), function(node) {
+        var id = node.dataset.id;
+        for (var i = 0; i < window.Pick3Logic.BOONS.length; i++) {
+          if (window.Pick3Logic.BOONS[i].id === id) return window.Pick3Logic.BOONS[i];
+        }
+        return null;
+      }).filter(Boolean);
+      renderBoonList();
+    });
+    boonList.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      if (!dragItem) return;
+      var rows = Array.prototype.slice.call(boonList.querySelectorAll('li:not(.dragging)'));
+      var next = null;
+      for (var i = 0; i < rows.length; i++) {
+        var box = rows[i].getBoundingClientRect();
+        var offset = e.clientY - (box.top + box.height / 2);
+        if (offset < 0) { next = rows[i]; break; }
+      }
+      if (next) boonList.insertBefore(dragItem, next);
+      else boonList.appendChild(dragItem);
+    });
+
+    runBtn.addEventListener('click', function() {
+      var runs = parseInt(runsInput.value, 10);
+      if (!Number.isFinite(runs) || runs < 1) {
+        statusEl.textContent = 'Enter a valid positive number of runs.';
+        return;
+      }
+      runSimulation(runs);
+    });
+
+    renderBoonList();
+    drawPlot([]);
+  </script>
+</body>
+</html>
