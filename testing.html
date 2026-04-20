@@ -149,11 +149,11 @@
     }, {});
     // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
     var FRAME_TIME_BUDGET_MILLISECONDS = 25;
-    var MAX_SPINS_PER_RUN = 400;
+    var SIMULATION_MAX_SPINS_PER_RUN = 400;
     var MAX_DEAD_ZONE_RETRIES = 18;
 
     function formatBoonRange(rg) {
-      if (!rg) return '';
+      if (!rg) return 'N/A';
       if (rg.int === true || rg.min === rg.max) return String(rg.min);
       if (rg.step) return rg.min + ' to ' + rg.max + ' (step ' + rg.step + ')';
       return rg.min + ' to ' + rg.max;
@@ -222,7 +222,7 @@
       var nid = 6;
       var pickedVals = [];
       // Safety cap prevents a pathological run from looping forever.
-      var cap = MAX_SPINS_PER_RUN;
+      var cap = SIMULATION_MAX_SPINS_PER_RUN;
 
       while (cap-- > 0) {
         sc += 1;
