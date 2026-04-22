@@ -310,6 +310,22 @@
         else if (phase === 'reveal') advance();
       }, [phase, finish, advance]);
 
+      var handleWheelClick = useCallback(function(e) {
+        if (phase !== 'idle') return;
+        e.preventDefault();
+        e.stopPropagation();
+        spin();
+      }, [phase, spin]);
+
+      var handleWheelKeyDown = useCallback(function(e) {
+        if (phase !== 'idle') return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          spin();
+        }
+      }, [phase, spin]);
+
       useEffect(function() {
         if (phase !== 'reveal' || !rtile) return;
         if (rtile.baseType === 'lose' && rtile.type === 'win') {
@@ -336,13 +352,8 @@
         if (res.flippedIds && res.flippedIds.length > 0) {
           setTimeout(function() { setFlippedTiles([]); }, 560);
         }
-        if (res.grew) {
-          setGl(function(g) { return g + 1; });
-          setPhase('growing');
-          t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
-        } else {
-          setPhase('idle');
-        }
+        if (res.grew) setGl(function(g) { return g + 1; });
+        setPhase('idle');
         setNonCommonPickStreak(function(streak) {
           return boon.rarity === 'common' ? 0 : (streak + 1);
         });
@@ -498,7 +509,14 @@
             </div>
 
             {/* Wheel */}
-            <div style={{ position: 'relative', width: 385, height: 370 }}>
+            <div
+              style={{ position: 'relative', width: 385, height: 370 }}
+              onClick={handleWheelClick}
+              onKeyDown={handleWheelKeyDown}
+              role="button"
+              aria-label="Spin wheel"
+              tabIndex={phase === 'idle' ? 0 : -1}
+            >
               {/* Right-side pointer */}
               <div style={{
                 position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
