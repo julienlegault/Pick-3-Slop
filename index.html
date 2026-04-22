@@ -31,22 +31,33 @@
       60% { transform: translateX(-2px) rotate(-1deg); }
       80% { transform: translateX(2px) rotate(1deg); }
     }
-    @keyframes loseFlipToWin {
-      0% { transform: scale(1) rotateY(0deg); opacity: 1; }
-      50% { transform: scale(1.07) rotateY(90deg); opacity: .7; }
-      100% { transform: scale(1) rotateY(180deg); opacity: 1; }
+    @keyframes edgeOvertake {
+      0% {
+        opacity: 0;
+        stroke-width: 16;
+        filter: blur(2px);
+      }
+      45% {
+        opacity: .95;
+        stroke-width: 9;
+        filter: blur(1px);
+      }
+      100% {
+        opacity: 1;
+        stroke-width: 1.5;
+        filter: blur(0);
+      }
     }
-    @keyframes revealRescueFlip {
-      0% { transform: scale(1); }
-      40% { transform: scale(1.08); }
-      100% { transform: scale(1); }
+    @keyframes rescueTextFade {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
 
     .spin-btn:hover   { background: rgba(212,175,55,.1) !important; box-shadow: 0 0 26px rgba(212,175,55,.3) !important; }
     .again-btn:hover  { background: rgba(212,175,55,.1) !important; }
     .boon-card        { transition: transform .15s, box-shadow .15s !important; }
     .boon-card:hover  { transform: translateY(-4px) !important; }
-    .boon-tag         { position: relative; display: inline-block; }
+    .boon-tag         { position: relative; display: inline-block; touch-action: none; }
     .boon-tag.shaking { animation: boonShake .22s ease-in-out 2; }
     .boon-tip         {
       display: none;
@@ -93,6 +104,8 @@
       var shaking = props.shaking;
       var draggable = props.draggable;
       var [pinned, setPinned] = useState(false);
+      var startRef = useRef(null);
+      var movedRef = useRef(false);
       var c = RC[b.rarity];
       var sz = large
         ? { padding: '4px 11px', fontSize: '.7rem' }
@@ -102,12 +115,38 @@
       return (
         <span
           className={cls}
-          draggable={!!draggable}
-          onDragStart={props.onDragStart}
-          onDragOver={props.onDragOver}
-          onDrop={props.onDrop}
-          onDragEnd={props.onDragEnd}
-          onClick={function(e) { e.stopPropagation(); setPinned(function(p) { return !p; }); }}
+          data-boon-iid={b.iid}
+          onPointerDown={function(e) {
+            if (draggable) {
+              startRef.current = { x: e.clientX, y: e.clientY };
+              movedRef.current = false;
+            }
+            if (props.onPointerDown) props.onPointerDown(e);
+          }}
+          onPointerMove={function(e) {
+            if (draggable && startRef.current) {
+              var dx = e.clientX - startRef.current.x;
+              var dy = e.clientY - startRef.current.y;
+              if ((dx * dx + dy * dy) > 25) movedRef.current = true;
+            }
+            if (props.onPointerMove) props.onPointerMove(e);
+          }}
+          onPointerUp={function(e) {
+            startRef.current = null;
+            if (props.onPointerUp) props.onPointerUp(e);
+          }}
+          onPointerCancel={function(e) {
+            startRef.current = null;
+            if (props.onPointerCancel) props.onPointerCancel(e);
+          }}
+          onClick={function(e) {
+            e.stopPropagation();
+            if (movedRef.current) {
+              movedRef.current = false;
+              return;
+            }
+            setPinned(function(p) { return !p; });
+          }}
           style={Object.assign({}, sz, {
             border: '1px solid ' + c,
             borderRadius: '2px',
@@ -210,18 +249,13 @@
 
         var chain = d.triggered || [];
         if (chain.length > 0) {
-          var idx = 0;
-          function step() {
-            if (idx >= chain.length) {
-              setShakingBoon(null);
-              finalizeReveal(d);
-              return;
-            }
-            setShakingBoon(chain[idx++]);
-            var tid = setTimeout(function() { step(); }, 180);
+          chain.forEach(function(token, idx) {
+            var tid = setTimeout(function() { setShakingBoon(token); }, idx * 120);
             t4.current.push(tid);
-          }
-          step();
+          });
+          var clearTid = setTimeout(function() { setShakingBoon(null); }, chain.length * 120 + 140);
+          t4.current.push(clearTid);
+          finalizeReveal(d);
         } else {
           finalizeReveal(d);
         }
@@ -265,7 +299,8 @@
         t1.current = setTimeout(finish, 3500);
       }, [phase, tiles, boons, wdeg, nChoices, gl, shopsSeen, nonCommonPickStreak, finish]);
 
-      var handleClick = useCallback(function() {
+      var handleInteract = useCallback(function(e) {
+        if (e) e.stopPropagation();
         if (phase === 'spinning') finish();
         else if (phase === 'reveal') advance();
       }, [phase, finish, advance]);
@@ -327,33 +362,46 @@
       var flippedMap = {};
       flippedTiles.forEach(function(id) { flippedMap[id] = true; });
 
-      var startDragBoon = useCallback(function(iid) {
-        setDragIid(iid);
-      }, []);
-
-      var overDragBoon = useCallback(function(e, iid) {
-        if (!dragIid || dragIid === iid) return;
-        e.preventDefault();
-        setDragOverIid(iid);
-      }, [dragIid]);
-
-      var dropDragBoon = useCallback(function(e, iid) {
-        e.preventDefault();
-        if (!dragIid || dragIid === iid) return;
+      var reorderBoonsByIid = useCallback(function(fromIid, toIid) {
+        if (!fromIid || !toIid || fromIid === toIid) return;
         setBoons(function(prev) {
-          var src = prev.findIndex(function(b) { return b.iid === dragIid; });
-          var dst = prev.findIndex(function(b) { return b.iid === iid; });
-          if (src < 0 || dst < 0) return prev;
+          var src = prev.findIndex(function(b) { return b.iid === fromIid; });
+          var dst = prev.findIndex(function(b) { return b.iid === toIid; });
+          if (src < 0 || dst < 0 || src === dst) return prev;
           var next = prev.slice();
           var moved = next.splice(src, 1)[0];
           next.splice(dst, 0, moved);
           return next;
         });
-        setDragIid(null);
-        setDragOverIid(null);
+      }, []);
+
+      var startDragBoon = useCallback(function(e, iid) {
+        if (phase !== 'idle') return;
+        if (e.pointerType === 'touch') e.preventDefault();
+        if (e.currentTarget && e.currentTarget.setPointerCapture) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+        setDragIid(iid);
+        setDragOverIid(iid);
+      }, [phase]);
+
+      var moveDragBoon = useCallback(function(e) {
+        if (!dragIid) return;
+        if (e.pointerType === 'touch') e.preventDefault();
+        var target = document.elementFromPoint(e.clientX, e.clientY);
+        var holder = target && target.closest ? target.closest('[data-boon-iid]') : null;
+        var overIid = holder ? holder.getAttribute('data-boon-iid') : null;
+        if (!overIid) return;
+        setDragOverIid(overIid);
       }, [dragIid]);
 
       var endDragBoon = useCallback(function() {
+        reorderBoonsByIid(dragIid, dragOverIid);
+        setDragIid(null);
+        setDragOverIid(null);
+      }, [dragIid, dragOverIid, reorderBoonsByIid]);
+
+      var cancelDragBoon = useCallback(function() {
         setDragIid(null);
         setDragOverIid(null);
       }, []);
@@ -373,7 +421,8 @@
             cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default',
             userSelect: 'none',
           }}
-          onClick={handleClick}
+          onPointerDown={handleInteract}
+          onClick={handleInteract}
         >
           {/* Blurable main content */}
           <div style={{
@@ -410,21 +459,35 @@
               }}>
                 <circle cx={CX} cy={CY} r={R + 5} fill="none" stroke="#2a2a2a" strokeWidth={2} />
                 {dl.map(function(t, i) {
-                  return (
-                    <path
-                      key={t.id}
-                      d={slicePath(da[i].start, da[i].end)}
-                      fill={t.type === 'dead' ? '#3a2f45' : (t.type === 'win' ? '#d4d4d4' : '#1e1e1e')}
-                      stroke="#0f0f0f"
-                      strokeWidth={1.5}
-                      style={flippedMap[t.id] ? {
-                        animation: 'loseFlipToWin .55s ease',
-                        transformBox: 'fill-box',
-                        transformOrigin: 'center',
-                      } : null}
-                    />
-                  );
-                })}
+                    if (flippedMap[t.id] && t.type === 'win') {
+                      return (
+                        <g key={t.id}>
+                          <path
+                            d={slicePath(da[i].start, da[i].end)}
+                            fill="#1e1e1e"
+                            stroke="#0f0f0f"
+                            strokeWidth={1.5}
+                          />
+                          <path
+                            d={slicePath(da[i].start, da[i].end)}
+                            fill="#d4d4d4"
+                            stroke="#0f0f0f"
+                            strokeWidth={1.5}
+                            style={{ animation: 'edgeOvertake .55s ease both' }}
+                          />
+                        </g>
+                      );
+                    }
+                    return (
+                      <path
+                        key={t.id}
+                        d={slicePath(da[i].start, da[i].end)}
+                        fill={t.type === 'dead' ? '#3a2f45' : (t.type === 'win' ? '#d4d4d4' : '#1e1e1e')}
+                        stroke="#0f0f0f"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  })}
                 <circle cx={CX} cy={CY} r={17} fill="#0f0f0f" stroke="#333" strokeWidth={2} />
                 <circle cx={CX} cy={CY} r={5.5} fill="#3a3a3a" />
               </svg>
@@ -435,7 +498,8 @@
               {phase === 'idle' && (
                 <button
                   className="spin-btn"
-                  onClick={function(e) { e.stopPropagation(); spin(); }}
+                  onPointerDown={function(e) { e.stopPropagation(); spin(); }}
+                  onClick={function(e) { e.stopPropagation(); }}
                   style={{
                     padding: '9px 42px', background: 'transparent',
                     border: '2px solid #D4AF37', color: '#D4AF37',
@@ -443,6 +507,7 @@
                     letterSpacing: '.4em', cursor: 'pointer',
                     transition: 'background .15s, box-shadow .15s',
                     boxShadow: '0 0 14px rgba(212,175,55,.1)',
+                    touchAction: 'manipulation',
                   }}
                 >
                   SPIN
@@ -468,16 +533,16 @@
                 <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                   {shownBoons.map(function(b, i) {
                     return (
-                      <BoonTag
-                        key={(b.iid || b.id) + '_' + i}
+                        <BoonTag
+                        key={b.iid || (b.id + '_' + i)}
                         b={b}
                         shaking={shakingBoon === (b.iid || (b.id + '_' + i))}
                         draggable={true}
                         dropTarget={dragOverIid === b.iid}
-                        onDragStart={function(e) { e.stopPropagation(); startDragBoon(b.iid); }}
-                        onDragOver={function(e) { overDragBoon(e, b.iid); }}
-                        onDrop={function(e) { e.stopPropagation(); dropDragBoon(e, b.iid); }}
-                        onDragEnd={endDragBoon}
+                        onPointerDown={function(e) { e.stopPropagation(); startDragBoon(e, b.iid); }}
+                        onPointerMove={moveDragBoon}
+                        onPointerUp={function(e) { e.stopPropagation(); endDragBoon(e); }}
+                        onPointerCancel={function(e) { e.stopPropagation(); cancelDragBoon(e); }}
                       />
                     );
                   })}
@@ -498,28 +563,38 @@
                 transformStyle: 'preserve-3d',
               }}>
                 <svg width={310} height={260} overflow="visible">
-                  <g style={rtile.baseType === 'lose' && rtile.type === 'win' ? {
-                    animation: 'revealRescueFlip .45s ease',
-                    transformBox: 'fill-box',
-                    transformOrigin: 'center',
-                  } : null}>
-                  <path
-                    d={revealWedge(rtile.halfSpan)}
-                    fill={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#242424' : (rtile.type === 'win' ? '#d4d4d4' : '#242424')}
-                    stroke={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#555' : (rtile.type === 'win' ? '#888' : '#555')}
-                    strokeWidth={2}
-                    style={rtile.baseType === 'lose' && rtile.type === 'win' ? {
-                      animation: 'loseFlipToWin .45s ease',
-                      transformBox: 'fill-box',
-                      transformOrigin: 'center',
-                    } : null}
-                  />
+                  <g>
+                  {(rtile.baseType === 'lose' && rtile.type === 'win') ? (
+                    <>
+                      <path
+                        d={revealWedge(rtile.halfSpan)}
+                        fill="#242424"
+                        stroke="#555"
+                        strokeWidth={2}
+                      />
+                      <path
+                        d={revealWedge(rtile.halfSpan)}
+                        fill="#d4d4d4"
+                        stroke="#888"
+                        strokeWidth={2}
+                        style={{ animation: 'edgeOvertake .45s ease both' }}
+                      />
+                    </>
+                  ) : (
+                    <path
+                      d={revealWedge(rtile.halfSpan)}
+                      fill={rtile.type === 'win' ? '#d4d4d4' : '#242424'}
+                      stroke={rtile.type === 'win' ? '#888' : '#555'}
+                      strokeWidth={2}
+                    />
+                  )}
                   <text
                     x={160} y={132}
                     textAnchor="middle" dominantBaseline="middle"
                     fontFamily="'Cinzel', serif" fontWeight="700"
                     fontSize={20} letterSpacing="3"
                     fill={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#d0d0d0' : (rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0')}
+                    style={(rtile.baseType === 'lose' && rtile.type === 'win' && revealFlip) ? { animation: 'rescueTextFade .2s ease' } : null}
                   >
                     {(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? 'x LOSE x' : (rtile.type === 'win' ? '* WIN *' : 'x LOSE x')}
                   </text>
