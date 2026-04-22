@@ -183,6 +183,7 @@
       var MAX_DEAD_ZONE_RETRIES = 18;
       var SHAKE_INTERVAL_MS = 120;
       var SHAKE_CLEAR_DELAY_MS = 140;
+      var SPIN_INTERACT_GUARD_MS = 80;
       var _s1  = useState(INIT_TILES); var tiles = _s1[0]; var setTiles = _s1[1];
       var _s2  = useState([]);         var boons = _s2[0]; var setBoons = _s2[1];
       var _s3  = useState(0);          var sc    = _s3[0]; var setSc    = _s3[1];
@@ -205,6 +206,7 @@
       var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null), t4 = useRef([]);
       var doneRef = useRef(false);
       var revDone = useRef(false);
+      var spinInteractGuardRef = useRef(false);
       var dragPointerTargetRef = useRef(null);
       var dragPointerIdRef = useRef(null);
 
@@ -298,6 +300,11 @@
           nonCommonPickStreak: nonCommonPickStreak
         };
         doneRef.current = false;
+        spinInteractGuardRef.current = true;
+        clearTimeout(t3.current);
+        t3.current = setTimeout(function() {
+          spinInteractGuardRef.current = false;
+        }, SPIN_INTERACT_GUARD_MS);
         setAnim(true);
         setWdeg(target);
         setPhase('spinning');
@@ -306,6 +313,7 @@
 
       var handleInteract = useCallback(function(e) {
         e.stopPropagation();
+        if (spinInteractGuardRef.current) return;
         if (phase === 'spinning') finish();
         else if (phase === 'reveal') advance();
       }, [phase, finish, advance]);
