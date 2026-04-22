@@ -216,6 +216,7 @@
     var pickWeighted = window.Pick3Logic.pickWeighted;
     var drawBoons = window.Pick3Logic.drawBoons;
     var tryRescue = window.Pick3Logic.tryRescue;
+    var enforceMinimumLoseAreaAfterSpin = window.Pick3Logic.enforceMinimumLoseAreaAfterSpin;
     var applyBoon = window.Pick3Logic.applyBoon;
     var RC = window.Pick3Logic.RC;
 
@@ -463,6 +464,13 @@
           boons = res.boons;
         }
         if (result === 'lose') break;
+        var forcedGrowth = enforceMinimumLoseAreaAfterSpin(tiles, boons, nid);
+        if (forcedGrowth.grew) {
+          tiles = forcedGrowth.tiles;
+          boons = forcedGrowth.boons;
+          nid = forcedGrowth.nextId;
+          gl += 1;
+        }
 
         var shop = drawBoons(nChoices, gl, boons, { firstShop: shopsSeen === 0 });
         var choices = shop.choices;

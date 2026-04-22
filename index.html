@@ -94,7 +94,7 @@
       const {
         CX, CY, R, LAND, BOONS, RC, INIT_TILES,
         slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
-        pickWeighted, drawBoons, getShopRerolls, rerollShop, tryRescue, applyBoon,
+        pickWeighted, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
       } = window.Pick3Logic;
 
     // BoonTag — tooltip via CSS class toggle + hover, no portal
@@ -217,7 +217,16 @@
         clearTimeout(t2.current);
         var d = spinRef.current;
         if (d.result === 'win') {
-          var shop = drawBoons(d.nc, d.gl, d.fb, {
+          var boonsForShop = d.fb;
+          var growthAdjustedLevel = d.gl;
+          if (d.postSpinGrowth && d.postSpinGrowth.grew) {
+            setTiles(d.postSpinGrowth.tiles);
+            setNid(d.postSpinGrowth.nextId);
+            boonsForShop = d.postSpinGrowth.boons;
+            growthAdjustedLevel += 1;
+            setGl(function(g) { return g + 1; });
+          }
+          var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
             firstShop: d.shopsSeen === 0,
             nonCommonPickStreak: d.nonCommonPickStreak,
           });
@@ -291,10 +300,15 @@
           fb = res.boons;
           triggered = res.triggered || [];
         }
+        var postSpinGrowth = null;
+        if (result === 'win') {
+          var growth = enforceMinimumLoseAreaAfterSpin(spinTiles, fb, nid);
+          if (growth.grew) postSpinGrowth = growth;
+        }
 
         spinRef.current = {
           targetDeg: target, result: result, baseType: landed, triggered: triggered,
-          fb: fb, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen,
+          fb: fb, postSpinGrowth: postSpinGrowth, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen,
           nonCommonPickStreak: nonCommonPickStreak
         };
         doneRef.current = false;

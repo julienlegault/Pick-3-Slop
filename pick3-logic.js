@@ -29,6 +29,7 @@
   var MID_GROWTH_WIN_RATIO = 5 / 9;
   var MIN_GROWTH_WIN_RATIO = 1 / 3;
   var GROWTH_WIN_RATIO_STEP = 1 / 18;
+  var MIN_POST_SPIN_LOSE_AREA_RATIO = 0.005;
 
   function rarityMult(rarity, gl) {
     var arr = RARITY_SCALE[rarity] || [1];
@@ -901,6 +902,46 @@
     return level;
   }
 
+  function growWheel(tiles, boons, startId) {
+    var n = tiles.length;
+    var priorGrowthLevel = inferGrowthLevelFromTileCount(n);
+    var ratio = growthWinRatio(priorGrowthLevel);
+    var grown = buildGrowthTiles(n * WHEEL_GROWTH_MULTIPLIER, ratio, startId);
+    var t2 = grown.tiles;
+    var id = grown.nextId;
+    var flippedIds = [];
+
+    var bonusWins = 0;
+    boons.forEach(function(b) { if (b.effect === 'growth_bonus_win') bonusWins += boonNumeric(b, 'amount'); });
+    if (bonusWins > 0) {
+      flippedIds = flippedIds.concat(convertLoseToWin(t2, bonusWins));
+    }
+    var b2 = boons.filter(function(b) { return b.effect !== 'tide_shift'; });
+    return { tiles: t2, boons: b2, nextId: id, flippedIds: flippedIds };
+  }
+
+  function loseAreaRatio(tiles, boons) {
+    var layout = buildLayout(tiles, boons, false);
+    var total = layout.reduce(function(sum, t) { return sum + t.sz; }, 0);
+    if (total <= 0) return 0;
+    var lose = layout.reduce(function(sum, t) { return sum + (t.type === 'lose' ? t.sz : 0); }, 0);
+    return lose / total;
+  }
+
+  function enforceMinimumLoseAreaAfterSpin(tiles, boons, nid) {
+    if (loseAreaRatio(tiles, boons) >= MIN_POST_SPIN_LOSE_AREA_RATIO) {
+      return { tiles: tiles, boons: boons, nextId: nid, grew: false, flippedIds: [] };
+    }
+    var grown = growWheel(tiles, boons, nid);
+    return {
+      tiles: grown.tiles,
+      boons: grown.boons,
+      nextId: grown.nextId,
+      grew: true,
+      flippedIds: grown.flippedIds
+    };
+  }
+
   function applyBoon(boon, tiles, boons, nid) {
     var t2 = tiles.slice();
     var picked = Object.assign({}, boon, { iid: boon.iid || makeIid(boon.id) });
@@ -959,19 +1000,11 @@
 
     var grew = t2.every(function(t) { return t.type === 'win'; });
     if (grew) {
-      var n = t2.length;
-      var priorGrowthLevel = inferGrowthLevelFromTileCount(n);
-      var ratio = growthWinRatio(priorGrowthLevel);
-      var grown = buildGrowthTiles(n * WHEEL_GROWTH_MULTIPLIER, ratio, id);
-      t2 = grown.tiles;
-      id = grown.nextId;
-
-      var bonusWins = 0;
-      b2.forEach(function(b) { if (b.effect === 'growth_bonus_win') bonusWins += boonNumeric(b, 'amount'); });
-      if (bonusWins > 0) {
-        flippedIds = flippedIds.concat(convertLoseToWin(t2, bonusWins));
-      }
-      b2 = b2.filter(function(b) { return b.effect !== 'tide_shift'; });
+      var growth = growWheel(t2, b2, id);
+      t2 = growth.tiles;
+      b2 = growth.boons;
+      id = growth.nextId;
+      flippedIds = flippedIds.concat(growth.flippedIds);
     }
 
     b2 = applyValueAuraOnPick(b2, picked);
@@ -1003,6 +1036,7 @@
     getShopRerolls: getShopRerolls,
     rerollShop: rerollShop,
     tryRescue: tryRescue,
+    enforceMinimumLoseAreaAfterSpin: enforceMinimumLoseAreaAfterSpin,
     applyBoon: applyBoon,
   };
 })(window);
