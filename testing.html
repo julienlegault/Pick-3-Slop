@@ -251,6 +251,12 @@
       avgBoonRarity: 'average boon rarity',
       avgBoonSelectability: 'average boon selectability'
     };
+    var METRIC_IS_DISCRETE = {
+      spins: true,
+      nonCommonBoons: true,
+      runs: true,
+      wheelGrowthSize: true
+    };
 
     function formatBoonRange(rg) {
       if (!rg) return 'N/A';
@@ -399,9 +405,30 @@
       canvas.setAttribute('aria-label', 'Dot plot of simulation runs. Horizontal axis is ' + xLabel + ', vertical axis is ' + yLabel + ', and dot color gradient represents ' + cLabel + '.');
     }
 
+    function formatMetricValue(metric, value) {
+      if (!Number.isFinite(value)) return '0';
+      if (METRIC_IS_DISCRETE[metric]) return String(Math.round(value));
+      return value.toFixed(2);
+    }
+
     function setDebugVisibility(show) {
       runDebugSubEl.style.display = show ? '' : 'none';
       runLogEl.style.display = show ? '' : 'none';
+    }
+
+    function appendRunLogsBatched(startInclusive, endExclusive) {
+      if (startInclusive >= endExclusive) return;
+      var cursor = startInclusive;
+      function step() {
+        var frameStart = performance.now();
+        var chunkStart = cursor;
+        while (cursor < endExclusive && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
+          cursor += 1;
+        }
+        appendRunLogs(chunkStart, cursor);
+        if (cursor < endExclusive) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
     }
 
     function runSingle(prioMap, options) {
@@ -539,7 +566,7 @@
         ctx.moveTo(x, mt);
         ctx.lineTo(x, h - mb);
         ctx.stroke();
-        ctx.fillText(xv.toFixed(2), x - 18, h - mb + 16);
+        ctx.fillText(formatMetricValue(xMetric, xv), x - 18, h - mb + 16);
       }
 
       var yTickCount = 5;
@@ -553,15 +580,17 @@
         ctx.lineTo(w - mr, py);
         ctx.stroke();
         ctx.fillStyle = '#7a7a7a';
-        ctx.fillText(yv.toFixed(2), 8, py + 4);
+        ctx.fillText(formatMetricValue(yMetric, yv), 8, py + 4);
       }
 
       ctx.fillStyle = '#9f9f9f';
-      ctx.fillText(METRIC_LABELS[xMetric] || xMetric, ml + pw / 2 - 110, h - 12);
+      var xAxisLabel = METRIC_LABELS[xMetric] || xMetric;
+      var yAxisLabel = METRIC_LABELS[yMetric] || yMetric;
+      ctx.fillText(xAxisLabel, ml + (pw - ctx.measureText(xAxisLabel).width) / 2, h - 12);
       ctx.save();
       ctx.translate(14, mt + ph / 2 + 36);
       ctx.rotate(-Math.PI / 2);
-      ctx.fillText(METRIC_LABELS[yMetric] || yMetric, 0, 0);
+      ctx.fillText(yAxisLabel, 0, 0);
       ctx.restore();
 
       var dotR = 3;
@@ -687,7 +716,7 @@
     showDebugInput.addEventListener('change', function() {
       var show = showDebugInput.checked;
       setDebugVisibility(show);
-      if (show && results.length && !runLogEl.children.length) appendRunLogs(0, results.length);
+      if (show && results.length && !runLogEl.children.length) appendRunLogsBatched(0, results.length);
     });
 
     renderBoonList();
