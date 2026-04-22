@@ -25,12 +25,12 @@
     }
     .controls {
       display: grid;
-      grid-template-columns: auto 1fr auto 1fr auto 1fr auto auto;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
       gap: 8px;
       align-items: center;
       margin-bottom: 14px;
     }
-    input, button {
+    input, select, button {
       background: #141414;
       color: #ddd;
       border: 1px solid #2a2a2a;
@@ -40,6 +40,13 @@
     }
     button { cursor: pointer; border-color: #D4AF37; color: #D4AF37; }
     .control-label { color: #b0b0b0; }
+    .control-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #b0b0b0;
+    }
+    .control-inline input { margin: 0; }
     .grid {
       display: grid;
       grid-template-columns: 350px 1fr;
@@ -142,6 +149,37 @@
         <input id="maxSpinsInput" type="number" min="1" step="1" value="75" />
         <label for="deadZoneRetriesInput" class="control-label">Dead zone retries</label>
         <input id="deadZoneRetriesInput" type="number" min="0" step="1" value="5" />
+        <label for="xMetricSelect" class="control-label">X axis</label>
+        <select id="xMetricSelect">
+          <option value="spins">number of spins</option>
+          <option value="nonCommonBoons">number of non-common boons</option>
+          <option value="runs">number of runs</option>
+          <option value="wheelGrowthSize">wheel growth size</option>
+          <option value="avgBoonRarity">average boon rarity</option>
+          <option value="avgBoonSelectability">average boon selectability</option>
+        </select>
+        <label for="yMetricSelect" class="control-label">Y axis</label>
+        <select id="yMetricSelect">
+          <option value="spins">number of spins</option>
+          <option value="nonCommonBoons" selected>number of non-common boons</option>
+          <option value="runs">number of runs</option>
+          <option value="wheelGrowthSize">wheel growth size</option>
+          <option value="avgBoonRarity">average boon rarity</option>
+          <option value="avgBoonSelectability">average boon selectability</option>
+        </select>
+        <label for="colorMetricSelect" class="control-label">Color gradient</label>
+        <select id="colorMetricSelect">
+          <option value="spins">number of spins</option>
+          <option value="nonCommonBoons">number of non-common boons</option>
+          <option value="runs">number of runs</option>
+          <option value="wheelGrowthSize">wheel growth size</option>
+          <option value="avgBoonRarity">average boon rarity</option>
+          <option value="avgBoonSelectability" selected>average boon selectability</option>
+        </select>
+        <label class="control-inline">
+          <input id="showDebugInput" type="checkbox" checked />
+          Show run debug
+        </label>
         <button id="runBtn">Run Simulation</button>
         <a href="./index.html" style="color:#6ea8ff;text-align:right;">Back to game</a>
       </div>
@@ -151,10 +189,10 @@
         <ul id="boonList"></ul>
       </div>
       <div class="panel">
-        <div class="sub">Dot histogram: x = spins survived, y = runs ended · dot color: green = common boons, red = rare boons</div>
-        <canvas id="plot" width="900" height="560" role="img" aria-label="Dot histogram of simulation runs. Horizontal axis is spins survived, vertical axis is number of runs that ended at that spin count. Each dot is colored green for runs with common boon picks and red for runs with rare boon picks."></canvas>
+        <div id="plotDescription" class="sub">Dot plot of simulation runs</div>
+        <canvas id="plot" width="900" height="560" role="img" aria-label="Dot plot of simulation runs."></canvas>
         <div id="status" role="status" aria-live="polite"></div>
-        <div class="sub run-debug-sub">Run debug: each picked boon is boxed by its own rarity, with an outer box showing the highest rarity offered in that shop</div>
+        <div id="runDebugSub" class="sub run-debug-sub">Run debug: each picked boon is boxed by its own rarity, with an outer box showing the highest rarity offered in that shop</div>
         <div id="runLog" role="log" aria-live="polite" aria-label="Simulation run log"></div>
       </div>
     </div>
@@ -185,8 +223,14 @@
     var runsInput = document.getElementById('runsInput');
     var maxSpinsInput = document.getElementById('maxSpinsInput');
     var deadZoneRetriesInput = document.getElementById('deadZoneRetriesInput');
+    var xMetricSelect = document.getElementById('xMetricSelect');
+    var yMetricSelect = document.getElementById('yMetricSelect');
+    var colorMetricSelect = document.getElementById('colorMetricSelect');
+    var showDebugInput = document.getElementById('showDebugInput');
+    var plotDescriptionEl = document.getElementById('plotDescription');
     var runBtn = document.getElementById('runBtn');
     var statusEl = document.getElementById('status');
+    var runDebugSubEl = document.getElementById('runDebugSub');
     var runLogEl = document.getElementById('runLog');
     var canvas = document.getElementById('plot');
     var ctx = canvas.getContext('2d');
@@ -199,6 +243,14 @@
     }, {});
     // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
     var FRAME_TIME_BUDGET_MILLISECONDS = 25;
+    var METRIC_LABELS = {
+      spins: 'number of spins',
+      nonCommonBoons: 'number of non-common boons',
+      runs: 'number of runs',
+      wheelGrowthSize: 'wheel growth size',
+      avgBoonRarity: 'average boon rarity',
+      avgBoonSelectability: 'average boon selectability'
+    };
 
     function formatBoonRange(rg) {
       if (!rg) return 'N/A';
@@ -321,6 +373,37 @@
       return { boon: best, value: bestVal };
     }
 
+    function getMetricValue(run, metric) {
+      if (metric === 'spins') return run.spins;
+      if (metric === 'nonCommonBoons') return run.nonCommonBoons;
+      if (metric === 'runs') return run.runNumber;
+      if (metric === 'wheelGrowthSize') return run.wheelGrowthSize;
+      if (metric === 'avgBoonRarity') return run.avgBoonRarity;
+      if (metric === 'avgBoonSelectability') return run.avgBoonSelectability;
+      return 0;
+    }
+
+    function getSelectedMetrics() {
+      return {
+        xMetric: xMetricSelect.value,
+        yMetric: yMetricSelect.value,
+        colorMetric: colorMetricSelect.value
+      };
+    }
+
+    function updatePlotDescription(metrics) {
+      var xLabel = METRIC_LABELS[metrics.xMetric] || metrics.xMetric;
+      var yLabel = METRIC_LABELS[metrics.yMetric] || metrics.yMetric;
+      var cLabel = METRIC_LABELS[metrics.colorMetric] || metrics.colorMetric;
+      plotDescriptionEl.textContent = 'Dot plot: x = ' + xLabel + ', y = ' + yLabel + ' · color gradient = ' + cLabel;
+      canvas.setAttribute('aria-label', 'Dot plot of simulation runs. Horizontal axis is ' + xLabel + ', vertical axis is ' + yLabel + ', and dot color gradient represents ' + cLabel + '.');
+    }
+
+    function setDebugVisibility(show) {
+      runDebugSubEl.style.display = show ? '' : 'none';
+      runLogEl.style.display = show ? '' : 'none';
+    }
+
     function runSingle(prioMap, options) {
       var tiles = cloneTiles();
       var boons = [];
@@ -329,7 +412,9 @@
       var nid = 6;
       var shopsSeen = 0;
       var pickedVals = [];
+      var pickedRarityScores = [];
       var picks = [];
+      var nonCommonBoons = 0;
       // Safety cap prevents a pathological run from looping forever.
       var cap = options.maxSpinsPerRun;
 
@@ -365,6 +450,8 @@
         boons = applied.boons;
         nid = applied.nextId;
         pickedVals.push(picked.value);
+        pickedRarityScores.push(RARITY_RANK[picked.boon.rarity] || 0);
+        if ((picked.boon.rarity || 'common') !== 'common') nonCommonBoons += 1;
         picks.push({
           boon: {
             name: picked.boon.name,
@@ -377,15 +464,27 @@
         if (applied.grew) gl += 1;
       }
 
-      var avg = 0;
+      var avgSelectability = 0;
       if (pickedVals.length) {
         var sum = pickedVals.reduce(function(s, v) { return s + v; }, 0);
-        avg = sum / pickedVals.length;
+        avgSelectability = sum / pickedVals.length;
       }
-      return { spins: sc, avgBoonNumber: avg, picks: picks };
+      var avgRarity = 0;
+      if (pickedRarityScores.length) {
+        var raritySum = pickedRarityScores.reduce(function(s, v) { return s + v; }, 0);
+        avgRarity = raritySum / pickedRarityScores.length;
+      }
+      return {
+        spins: sc,
+        nonCommonBoons: nonCommonBoons,
+        wheelGrowthSize: gl,
+        avgBoonRarity: avgRarity,
+        avgBoonSelectability: avgSelectability,
+        picks: picks
+      };
     }
 
-    function drawPlot(data) {
+    function drawPlot(data, metrics) {
       var w = canvas.width, h = canvas.height;
       var ml = 56, mr = 18, mt = 18, mb = 46;
       var pw = w - ml - mr;
@@ -403,86 +502,87 @@
       ctx.lineTo(w - mr, h - mb);
       ctx.stroke();
 
-      if (!data.length) return;
-
-      // Cap x-axis at 99th-percentile of spins so rare outliers don't compress the distribution.
-      var sortedSpins = data.map(function(d) { return d.spins; }).sort(function(a, b) { return a - b; });
-      var p99idx = Math.min(Math.floor(sortedSpins.length * 0.99), sortedSpins.length - 1);
-      var xMax = Math.max(1, sortedSpins[p99idx]);
-
-      // Bin runs by spins survived so columns stay readable regardless of range.
-      var BIN_COUNT = 80;
-      var binSize = Math.max(1, Math.ceil(xMax / BIN_COUNT));
-      var actualBins = Math.ceil(xMax / binSize);
-      var bins = [];
-      for (var i = 0; i < actualBins; i++) bins.push([]);
-      for (var j = 0; j < data.length; j++) {
-        // spins is always >= 1; runs beyond xMax are clamped into the last bin.
-        var binIdx = Math.min(Math.floor(Math.max(0, data[j].spins - 1) / binSize), actualBins - 1);
-        bins[binIdx].push(data[j]);
+      if (!data.length) {
+        updatePlotDescription(metrics || getSelectedMetrics());
+        return;
       }
 
-      var yMax = Math.max(1, bins.reduce(function(m, b) { return Math.max(m, b.length); }, 0));
+      var xMetric = metrics.xMetric;
+      var yMetric = metrics.yMetric;
+      var colorMetric = metrics.colorMetric;
+      updatePlotDescription(metrics);
+
+      var xValues = data.map(function(run) { return getMetricValue(run, xMetric); });
+      var yValues = data.map(function(run) { return getMetricValue(run, yMetric); });
+      var cValues = data.map(function(run) { return getMetricValue(run, colorMetric); });
+
+      var xMin = Math.min.apply(null, xValues);
+      var xMax = Math.max.apply(null, xValues);
+      var yMin = Math.min.apply(null, yValues);
+      var yMax = Math.max.apply(null, yValues);
+      var cMin = Math.min.apply(null, cValues);
+      var cMax = Math.max.apply(null, cValues);
+
+      if (xMin === xMax) xMax = xMin + 1;
+      if (yMin === yMax) yMax = yMin + 1;
       var xTicks = 8;
 
       ctx.fillStyle = '#7a7a7a';
       ctx.font = '12px monospace';
 
       for (var i = 0; i <= xTicks; i++) {
-        var xv = Math.round((xMax / xTicks) * i);
-        var x = ml + (xv / xMax) * pw;
+        var xRatio = i / xTicks;
+        var xv = xMin + (xMax - xMin) * xRatio;
+        var x = ml + xRatio * pw;
         ctx.strokeStyle = '#222';
         ctx.beginPath();
         ctx.moveTo(x, mt);
         ctx.lineTo(x, h - mb);
         ctx.stroke();
-        ctx.fillText(String(xv), x - 8, h - mb + 16);
+        ctx.fillText(xv.toFixed(2), x - 18, h - mb + 16);
       }
 
       var yTickCount = 5;
       for (var yi = 0; yi <= yTickCount; yi++) {
-        var yv = Math.round((yMax / yTickCount) * yi);
-        var py = h - mb - (yv / yMax) * ph;
+        var yRatio = yi / yTickCount;
+        var yv = yMin + (yMax - yMin) * yRatio;
+        var py = h - mb - yRatio * ph;
         ctx.strokeStyle = '#1f1f1f';
         ctx.beginPath();
         ctx.moveTo(ml, py);
         ctx.lineTo(w - mr, py);
         ctx.stroke();
         ctx.fillStyle = '#7a7a7a';
-        ctx.fillText(String(yv), 24, py + 4);
+        ctx.fillText(yv.toFixed(2), 8, py + 4);
       }
 
       ctx.fillStyle = '#9f9f9f';
-      ctx.fillText('Spins survived', ml + pw / 2 - 40, h - 12);
+      ctx.fillText(METRIC_LABELS[xMetric] || xMetric, ml + pw / 2 - 110, h - 12);
       ctx.save();
       ctx.translate(14, mt + ph / 2 + 36);
       ctx.rotate(-Math.PI / 2);
-      ctx.fillText('Runs ended', 0, 0);
+      ctx.fillText(METRIC_LABELS[yMetric] || yMetric, 0, 0);
       ctx.restore();
 
-      // Dot size: 0.42 leaves a small gap between adjacent dots; clamped to 1-3.5px for visibility.
-      var dotR = Math.max(1, Math.min(3.5, Math.min(pw / actualBins * 0.42, ph / yMax * 0.42)));
-      // Colour scale: avgBoonNumber / BASE_BOONS.length → 0=common(green) to 1=rare(red).
-      var maxAvg = BASE_BOONS.length;
+      var dotR = 3;
       var MAX_RED_COMPONENT = 220;
       var MAX_GREEN_COMPONENT = 200;
+      var cSpan = cMax - cMin;
 
-      for (var bi = 0; bi < actualBins; bi++) {
-        var bin = bins[bi];
-        if (!bin.length) continue;
-        var binMidSpins = (bi + 0.5) * binSize;
-        var bx = ml + (binMidSpins / xMax) * pw;
-        for (var ri = 0; ri < bin.length; ri++) {
-          var run = bin[ri];
-          var by = h - mb - ((ri + 1) / yMax) * ph;
-          var t = Math.min(run.avgBoonNumber / maxAvg, 1);
-          var rc = Math.round(t * MAX_RED_COMPONENT);
-          var gc = Math.round((1 - t) * MAX_GREEN_COMPONENT);
-          ctx.fillStyle = 'rgba(' + rc + ',' + gc + ',20,0.78)';
-          ctx.beginPath();
-          ctx.arc(bx, by, dotR, 0, Math.PI * 2);
-          ctx.fill();
-        }
+      for (var ri = 0; ri < data.length; ri++) {
+        var run = data[ri];
+        var xv = getMetricValue(run, xMetric);
+        var yv = getMetricValue(run, yMetric);
+        var cv = getMetricValue(run, colorMetric);
+        var bx = ml + ((xv - xMin) / (xMax - xMin)) * pw;
+        var by = h - mb - ((yv - yMin) / (yMax - yMin)) * ph;
+        var t = cSpan === 0 ? 0.5 : Math.min(Math.max((cv - cMin) / cSpan, 0), 1);
+        var rc = Math.round(t * MAX_RED_COMPONENT);
+        var gc = Math.round((1 - t) * MAX_GREEN_COMPONENT);
+        ctx.fillStyle = 'rgba(' + rc + ',' + gc + ',20,0.65)';
+        ctx.beginPath();
+        ctx.arc(bx, by, dotR, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
@@ -493,25 +593,28 @@
       runBtn.disabled = true;
       statusEl.textContent = 'Running 0 / ' + totalRuns + '...';
       runLogEl.innerHTML = '';
+      setDebugVisibility(options.showDebug);
 
       function step() {
         var prevDone = done;
         var frameStart = performance.now();
         while (done < totalRuns && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
-          results.push(runSingle(prioMap, options));
+          var runResult = runSingle(prioMap, options);
+          runResult.runNumber = done + 1;
+          results.push(runResult);
           done += 1;
         }
-        drawPlot(results);
-        if (done > prevDone) appendRunLogs(prevDone, done);
+        drawPlot(results, options.metrics);
+        if (options.showDebug && done > prevDone) appendRunLogs(prevDone, done);
         statusEl.textContent = 'Running ' + done + ' / ' + totalRuns + '...';
         if (done < totalRuns) requestAnimationFrame(step);
         else {
           var avgSpins = results.reduce(function(s, r) { return s + r.spins; }, 0) / results.length;
-          var avgBoon = results.reduce(function(s, r) { return s + r.avgBoonNumber; }, 0) / results.length;
+          var avgBoon = results.reduce(function(s, r) { return s + r.avgBoonSelectability; }, 0) / results.length;
           statusEl.textContent =
             'Done. Runs: ' + totalRuns +
             ' | Avg spins: ' + avgSpins.toFixed(2) +
-            ' | Avg boon number: ' + avgBoon.toFixed(2);
+            ' | Avg boon selectability: ' + avgBoon.toFixed(2);
           runBtn.disabled = false;
         }
       }
@@ -564,14 +667,32 @@
         statusEl.textContent = 'Enter valid dead zone retries (minimum 0).';
         return;
       }
+      var metrics = getSelectedMetrics();
       runSimulation(runs, {
         maxSpinsPerRun: maxSpinsPerRun,
-        maxDeadZoneRetries: maxDeadZoneRetries
+        maxDeadZoneRetries: maxDeadZoneRetries,
+        showDebug: showDebugInput.checked,
+        metrics: metrics
       });
     });
 
+    [xMetricSelect, yMetricSelect, colorMetricSelect].forEach(function(selectEl) {
+      selectEl.addEventListener('change', function() {
+        var metrics = getSelectedMetrics();
+        updatePlotDescription(metrics);
+        if (results.length) drawPlot(results, metrics);
+      });
+    });
+
+    showDebugInput.addEventListener('change', function() {
+      var show = showDebugInput.checked;
+      setDebugVisibility(show);
+      if (show && results.length && !runLogEl.children.length) appendRunLogs(0, results.length);
+    });
+
     renderBoonList();
-    drawPlot([]);
+    setDebugVisibility(showDebugInput.checked);
+    drawPlot([], getSelectedMetrics());
   </script>
 </body>
 </html>
