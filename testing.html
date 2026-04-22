@@ -561,12 +561,13 @@
         var xRatio = i / xTicks;
         var xv = xMin + (xMax - xMin) * xRatio;
         var x = ml + xRatio * pw;
+        var xTickLabel = formatMetricValue(xMetric, xv);
         ctx.strokeStyle = '#222';
         ctx.beginPath();
         ctx.moveTo(x, mt);
         ctx.lineTo(x, h - mb);
         ctx.stroke();
-        ctx.fillText(formatMetricValue(xMetric, xv), x - 18, h - mb + 16);
+        ctx.fillText(xTickLabel, x - ctx.measureText(xTickLabel).width / 2, h - mb + 16);
       }
 
       var yTickCount = 5;
@@ -574,13 +575,14 @@
         var yRatio = yi / yTickCount;
         var yv = yMin + (yMax - yMin) * yRatio;
         var py = h - mb - yRatio * ph;
+        var yTickLabel = formatMetricValue(yMetric, yv);
         ctx.strokeStyle = '#1f1f1f';
         ctx.beginPath();
         ctx.moveTo(ml, py);
         ctx.lineTo(w - mr, py);
         ctx.stroke();
         ctx.fillStyle = '#7a7a7a';
-        ctx.fillText(formatMetricValue(yMetric, yv), 8, py + 4);
+        ctx.fillText(yTickLabel, ml - 8 - ctx.measureText(yTickLabel).width, py + 4);
       }
 
       ctx.fillStyle = '#9f9f9f';
