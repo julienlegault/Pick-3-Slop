@@ -199,10 +199,6 @@
     }, {});
     // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
     var FRAME_TIME_BUDGET_MILLISECONDS = 25;
-    var DEFAULT_SIMULATION_MAX_SPINS_PER_RUN = 75;
-    var DEFAULT_MAX_DEAD_ZONE_RETRIES = 5;
-    maxSpinsInput.value = String(DEFAULT_SIMULATION_MAX_SPINS_PER_RUN);
-    deadZoneRetriesInput.value = String(DEFAULT_MAX_DEAD_ZONE_RETRIES);
 
     function formatBoonRange(rg) {
       if (!rg) return 'N/A';
