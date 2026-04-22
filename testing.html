@@ -25,7 +25,7 @@
     }
     .controls {
       display: grid;
-      grid-template-columns: auto 1fr auto auto;
+      grid-template-columns: auto 1fr auto 1fr auto 1fr auto auto;
       gap: 8px;
       align-items: center;
       margin-bottom: 14px;
@@ -133,14 +133,18 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>PICK 3 SLOP — TESTING</h1>
-    <div class="controls">
-      <label for="runsInput" class="control-label">Runs</label>
-      <input id="runsInput" type="number" min="1" step="1" value="400" />
-      <button id="runBtn">Run Simulation</button>
-      <a href="./index.html" style="color:#6ea8ff;text-align:right;">Back to game</a>
-    </div>
+    <div class="wrap">
+      <h1>PICK 3 SLOP — TESTING</h1>
+      <div class="controls">
+        <label for="runsInput" class="control-label">Runs</label>
+        <input id="runsInput" type="number" min="1" step="1" value="400" />
+        <label for="maxSpinsInput" class="control-label">Max spins per run</label>
+        <input id="maxSpinsInput" type="number" min="1" step="1" value="75" />
+        <label for="deadZoneRetriesInput" class="control-label">Dead zone retries</label>
+        <input id="deadZoneRetriesInput" type="number" min="0" step="1" value="5" />
+        <button id="runBtn">Run Simulation</button>
+        <a href="./index.html" style="color:#6ea8ff;text-align:right;">Back to game</a>
+      </div>
     <div class="grid">
       <div class="panel">
         <div class="sub">Boon Priority (top = highest preference)</div>
@@ -179,6 +183,8 @@
 
     var boonList = document.getElementById('boonList');
     var runsInput = document.getElementById('runsInput');
+    var maxSpinsInput = document.getElementById('maxSpinsInput');
+    var deadZoneRetriesInput = document.getElementById('deadZoneRetriesInput');
     var runBtn = document.getElementById('runBtn');
     var statusEl = document.getElementById('status');
     var runLogEl = document.getElementById('runLog');
@@ -193,8 +199,6 @@
     }, {});
     // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
     var FRAME_TIME_BUDGET_MILLISECONDS = 25;
-    var SIMULATION_MAX_SPINS_PER_RUN = 75;
-    var MAX_DEAD_ZONE_RETRIES = 5;
 
     function formatBoonRange(rg) {
       if (!rg) return 'N/A';
@@ -317,7 +321,7 @@
       return { boon: best, value: bestVal };
     }
 
-    function runSingle(prioMap) {
+    function runSingle(prioMap, options) {
       var tiles = cloneTiles();
       var boons = [];
       var sc = 0;
@@ -327,7 +331,7 @@
       var pickedVals = [];
       var picks = [];
       // Safety cap prevents a pathological run from looping forever.
-      var cap = SIMULATION_MAX_SPINS_PER_RUN;
+      var cap = options.maxSpinsPerRun;
 
       while (cap-- > 0) {
         sc += 1;
@@ -337,7 +341,7 @@
         boons = prep.boons;
         var layout = buildLayout(tiles, boons, true);
         var idx = pickWeighted(layout);
-        var guard = MAX_DEAD_ZONE_RETRIES;
+        var guard = options.maxDeadZoneRetries;
         while (layout[idx].type === 'dead' && guard-- > 0) idx = pickWeighted(layout);
         var result = layout[idx].type;
 
@@ -482,7 +486,7 @@
       }
     }
 
-    function runSimulation(totalRuns) {
+    function runSimulation(totalRuns, options) {
       results = [];
       var done = 0;
       var prioMap = getCurrentPriority();
@@ -494,7 +498,7 @@
         var prevDone = done;
         var frameStart = performance.now();
         while (done < totalRuns && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
-          results.push(runSingle(prioMap));
+          results.push(runSingle(prioMap, options));
           done += 1;
         }
         drawPlot(results);
@@ -546,11 +550,24 @@
 
     runBtn.addEventListener('click', function() {
       var runs = parseInt(runsInput.value, 10);
+      var maxSpinsPerRun = parseInt(maxSpinsInput.value, 10);
+      var maxDeadZoneRetries = parseInt(deadZoneRetriesInput.value, 10);
       if (!Number.isFinite(runs) || runs < 1) {
         statusEl.textContent = 'Enter a valid positive number of runs.';
         return;
       }
-      runSimulation(runs);
+      if (!Number.isFinite(maxSpinsPerRun) || maxSpinsPerRun < 1) {
+        statusEl.textContent = 'Enter a valid max spins per run (minimum 1).';
+        return;
+      }
+      if (!Number.isFinite(maxDeadZoneRetries) || maxDeadZoneRetries < 0) {
+        statusEl.textContent = 'Enter valid dead zone retries (minimum 0).';
+        return;
+      }
+      runSimulation(runs, {
+        maxSpinsPerRun: maxSpinsPerRun,
+        maxDeadZoneRetries: maxDeadZoneRetries
+      });
     });
 
     renderBoonList();
