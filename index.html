@@ -305,6 +305,7 @@
         clearTimeout(spinGuardTimeoutRef.current);
         spinGuardTimeoutRef.current = setTimeout(function() {
           spinInteractGuardRef.current = false;
+          spinGuardTimeoutRef.current = null;
         }, SPIN_INTERACT_GUARD_MS);
         setAnim(true);
         setWdeg(target);
