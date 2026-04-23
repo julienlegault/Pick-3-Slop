@@ -477,36 +477,59 @@
       var da   = calcAngles(dl);
       var wins = tiles.filter(function(t) { return t.type === 'win'; }).length;
       var isOverlay = phase === 'boon_select' || phase === 'game_over';
-      var renderWheelTile = function(t, i) {
-        if (flippedMap[t.id] && t.type === 'win') {
-          return (
-            <g key={t.id}>
-              <path
-                d={slicePath(da[i].start, da[i].end)}
-                fill="#1e1e1e"
-                stroke="#0f0f0f"
-                strokeWidth={1.5}
-              />
-              <path
-                d={slicePath(da[i].start, da[i].end)}
-                fill="#d4d4d4"
-                stroke="#0f0f0f"
-                strokeWidth={1.5}
-                style={{ animation: 'edgeOvertake .55s ease both' }}
-              />
-            </g>
-          );
+
+      // Divider-suppression: skip the stroke between two adjacent same-type tiles when
+      // the smaller tile's outer arc is < DIVIDER_SKIP_PX screen-pixels.
+      // The SVG renders at SVG_RENDER_PX wide over a SVG_VIEWBOX-unit viewBox (R=175 units).
+      // Rearranging arc_px = R * θ_deg * π/180 * (SVG_RENDER_PX/SVG_VIEWBOX) gives threshold ≈ 1.114°.
+      var DIVIDER_SKIP_PX  = 3;   // screen-pixels at the outer rim before a divider is suppressed
+      var SVG_RENDER_PX    = 370; // rendered SVG width in screen-pixels
+      var SVG_VIEWBOX      = 420; // SVG viewBox width in SVG units
+      var MERGE_THRESHOLD_DEG = DIVIDER_SKIP_PX * 180 * SVG_VIEWBOX / (R * Math.PI * SVG_RENDER_PX);
+      // Display switches to scientific notation above this tile count (100 trillion).
+      var SCIENTIFIC_NOTATION_THRESHOLD = 1e14;
+      function tileColor(type) {
+        return type === 'dead' ? '#3a2f45' : (type === 'win' ? '#d4d4d4' : '#1e1e1e');
+      }
+      function formatTileCount(n) {
+        if (n >= SCIENTIFIC_NOTATION_THRESHOLD) return n.toExponential(2);
+        return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      }
+
+      // Build render groups: consecutive same-type tiles are merged when at least one
+      // of the neighbouring tiles is "tiny" (outer arc < 3 screen-px).
+      var renderGroups = (function() {
+        var n = dl.length;
+        if (n === 0) return [];
+        var tiny = dl.map(function(t, i) { return (da[i].end - da[i].start) < MERGE_THRESHOLD_DEG; });
+        var groups = [];
+        var i = 0;
+        while (i < n) {
+          var type = dl[i].type;
+          var items = [i];
+          var j = i + 1;
+          while (j < n && dl[j].type === type && (tiny[j - 1] || tiny[j])) {
+            items.push(j);
+            j++;
+          }
+          groups.push({ items: items, startAngle: da[items[0]].start, endAngle: da[items[items.length - 1]].end, type: type });
+          i = j;
         }
-        return (
-          <path
-            key={t.id}
-            d={slicePath(da[i].start, da[i].end)}
-            fill={t.type === 'dead' ? '#3a2f45' : (t.type === 'win' ? '#d4d4d4' : '#1e1e1e')}
-            stroke="#0f0f0f"
-            strokeWidth={1.5}
-          />
-        );
-      };
+        // Circular merge: if the last group and first group are same type with a tiny boundary, merge them.
+        if (groups.length >= 2) {
+          var first = groups[0], last = groups[groups.length - 1];
+          if (first.type === last.type && (tiny[last.items[last.items.length - 1]] || tiny[first.items[0]])) {
+            groups[0] = {
+              items: last.items.concat(first.items),
+              startAngle: last.startAngle,
+              endAngle: first.endAngle + 360, // wrap past 360° — slicePath() handles this via trig periodicity in polar()
+              type: first.type,
+            };
+            groups.splice(groups.length - 1, 1);
+          }
+        }
+        return groups;
+      })();
 
       return (
         <div
@@ -561,10 +584,46 @@
                 transition: anim ? 'transform 3.4s cubic-bezier(0.14, 0.58, 0.08, 1.0)' : 'none',
               }}>
                 <circle cx={CX} cy={CY} r={R + 5} fill="none" stroke="#2a2a2a" strokeWidth={2} />
-                {dl.map(renderWheelTile)}
+                {renderGroups.map(function(group, gi) {
+                  // Any tile in this group undergoing the flip animation? → render individually.
+                  var hasFlipped = group.items.some(function(idx) { return flippedMap[dl[idx].id] && dl[idx].type === 'win'; });
+                  if (hasFlipped) {
+                    return group.items.map(function(idx) {
+                      var t = dl[idx], a = da[idx];
+                      if (flippedMap[t.id] && t.type === 'win') {
+                        return (
+                          <g key={t.id}>
+                            <path d={slicePath(a.start, a.end)} fill="#1e1e1e" stroke="#0f0f0f" strokeWidth={1.5} />
+                            <path d={slicePath(a.start, a.end)} fill="#d4d4d4" stroke="#0f0f0f" strokeWidth={1.5} style={{ animation: 'edgeOvertake .55s ease both' }} />
+                          </g>
+                        );
+                      }
+                      return <path key={t.id} d={slicePath(a.start, a.end)} fill={tileColor(t.type)} stroke="#0f0f0f" strokeWidth={1.5} />;
+                    });
+                  }
+                  // Render entire merged group as a single path — no internal dividers.
+                  return (
+                    <path key={'g' + gi} d={slicePath(group.startAngle, group.endAngle)} fill={tileColor(group.type)} stroke="#0f0f0f" strokeWidth={1.5} />
+                  );
+                })}
                 <circle cx={CX} cy={CY} r={17} fill="#0f0f0f" stroke="#333" strokeWidth={2} />
                 <circle cx={CX} cy={CY} r={5.5} fill="#3a3a3a" />
               </svg>
+
+              {/* Tile counter — static overlay (does not rotate with wheel) */}
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'none', zIndex: 5,
+                color: 'rgba(80,80,80,0.88)',
+                fontFamily: "'Cinzel', serif", fontWeight: '700',
+                fontSize: 'clamp(0.75rem, 3.5vw, 1.5rem)',
+                letterSpacing: '.06em', textAlign: 'center',
+                textShadow: '0 1px 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9)',
+                userSelect: 'none',
+              }}>
+                {formatTileCount(tiles.length)}
+              </div>
             </div>
 
             {/* Spin / hint */}
