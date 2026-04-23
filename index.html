@@ -376,8 +376,13 @@
         if (res.flippedIds && res.flippedIds.length > 0) {
           setTimeout(function() { setFlippedTiles([]); }, 560);
         }
-        if (res.grew) setGl(function(g) { return g + 1; });
-        setPhase('idle');
+        if (res.grew) {
+          setGl(function(g) { return g + 1; });
+          setPhase('growing');
+          t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
+        } else {
+          setPhase('idle');
+        }
         setNonCommonPickStreak(function(streak) {
           return boon.rarity === 'common' ? 0 : (streak + 1);
         });
@@ -513,7 +518,6 @@
             cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default',
             userSelect: 'none',
           }}
-          onPointerDown={handleInteract}
           onClick={handleInteract}
         >
           {/* Blurable main content */}
