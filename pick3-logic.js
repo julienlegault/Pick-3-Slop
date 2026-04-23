@@ -31,6 +31,7 @@
   var GROWTH_WIN_RATIO_LATE_START = 0.25;      // win ratio at late-start level
   var GROWTH_WIN_RATIO_LATE_END = 0.05;        // win ratio at late-end level (95% loss)
   var MIN_POST_SPIN_LOSE_AREA_RATIO = 0.005;
+  var MAX_PERCENTAGE = 0.99;
 
   function rarityMult(rarity, gl) {
     var arr = RARITY_SCALE[rarity] || [1];
@@ -446,7 +447,7 @@
     if (typeof val !== 'number') return val;
     if (key === 'charges' || key === 'amount') return Math.max(MIN_STACKABLE_COUNT, Math.round(val + fb * FLAT_BONUS_STACK_TO_COUNT));
     var capKey = key + 'Cap';
-    var cap = (boon[capKey] !== undefined) ? boon[capKey] : 0.99;
+    var cap = (boon[capKey] !== undefined) ? Math.min(boon[capKey], MAX_PERCENTAGE) : MAX_PERCENTAGE;
     return clamp(val + fb, 0, cap);
   }
 
