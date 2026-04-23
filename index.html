@@ -222,6 +222,8 @@
       );
     }
 
+    var NO_TRACK = (new URLSearchParams(window.location.search)).has('notrack');
+
     function App() {
       var SHAKE_INTERVAL_MS = 120;
       var SHAKE_CLEAR_DELAY_MS = 140;
@@ -334,6 +336,7 @@
 
       var spin = useCallback(function() {
         if (phase !== 'idle') return;
+        if (!NO_TRACK) { fetch('https://api.counterapi.dev/v2/pick3slop/spins/up').catch(function() {}); }
         var prep = prepareSpin(tiles, boons);
         var spinTiles = prep.tiles;
         var spinBoons = prep.boons;
