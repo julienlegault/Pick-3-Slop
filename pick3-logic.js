@@ -504,6 +504,8 @@
       return b0.descFn(b0.rarity, vals);
     }
     if (effect === 'tide_shift') {
+      // Compound growth: each copy multiplies the remaining win-area factor,
+      // so combined = (1+a)(1+b)...-1, not a simple sum.
       vals.winGrow = groupBoons.reduce(function(acc, b) { return (acc + 1) * (1 + boonNumeric(b, 'winGrow')) - 1; }, 0);
       vals.loseShrink = 1 - groupBoons.reduce(function(acc, b) { return acc * (1 - boonNumeric(b, 'loseShrink')); }, 1);
       return b0.descFn(b0.rarity, vals);
