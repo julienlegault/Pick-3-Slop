@@ -16,6 +16,8 @@
   var MIN_ANCHOR_SCALE = 0.08;
   // Tolerance for float comparisons when checking if a clamped scale reached its minimum.
   var ANCHOR_SCALE_EPSILON = 1e-9;
+  var WIN_AREA_BOON_CAPS = { uncommon: 0.35, rare: 0.60, legendary: 0.90 };
+  var WIN_MERGE_BOON_CAPS = { uncommon: 0.10, rare: 0.20, legendary: 0.35 };
   var MIN_LOSE_TILE_MULT = 0.08;
   var COMMON_CATCHUP_MIN_STREAK = 2;
   var COMMON_CATCHUP_PER_EXTRA_NON_COMMON = 0.45;
@@ -52,7 +54,7 @@
     return def;
   }
 
-  function numericBoon(idRoot, name, effect, wMap, rangesByKey, descFn, extra) {
+  function numericBoon(idRoot, name, effect, wMap, rangesByKey, descFn, extra, keyCaps) {
     var out = [];
     ['uncommon', 'rare', 'legendary'].forEach(function(rarity) {
       var valueRanges = {};
@@ -80,7 +82,17 @@
             rolled[k] = v;
           });
           rolled.effect = effect;
+          rolled.descFn = descFn;
+          rolled.valueKeys = Object.keys(rangesByKey);
           rolled.desc = descFn(rarity, rolled);
+          if (keyCaps) {
+            Object.keys(keyCaps).forEach(function(k) {
+              var caps = keyCaps[k];
+              if (caps && caps[rarity] !== undefined) {
+                rolled[k + 'Cap'] = caps[rarity];
+              }
+            });
+          }
           if (extra) {
             Object.keys(extra).forEach(function(k) {
               rolled[k] = extra[k];
@@ -170,7 +182,9 @@
         legendary: { min: 0.30, max: 0.45, step: 0.01 },
       }
     },
-    function(_, v) { return 'Win tiles +' + pct(v.winGrow) + '% size and lose tiles -' + pct(v.loseShrink) + '% size.'; }
+    function(_, v) { return 'Win tiles +' + pct(v.winGrow) + '% size and lose tiles -' + pct(v.loseShrink) + '% size.'; },
+    null,
+    { winGrow: WIN_AREA_BOON_CAPS }
   ));
 
   ['common', 'uncommon', 'rare', 'legendary'].forEach(function(targetRarity) {
@@ -293,7 +307,9 @@
       rare: { min: 0.07, max: 0.12, step: 0.01 },
       legendary: { min: 0.15, max: 0.22, step: 0.01 },
     }},
-    function(_, v) { return 'Adjacent win tiles grow by +' + pct(v.mergeGrow) + '% each spin.'; }
+    function(_, v) { return 'Adjacent win tiles grow by +' + pct(v.mergeGrow) + '% each spin.'; },
+    null,
+    { mergeGrow: WIN_MERGE_BOON_CAPS }
   ));
 
   addMany(numericBoon(
@@ -444,7 +460,59 @@
     if (typeof val !== 'number') return val;
     if (key === 'charges' || key === 'amount') return Math.max(MIN_STACKABLE_COUNT, Math.round(val + fb * FLAT_BONUS_STACK_TO_COUNT));
     if (key === 'size') return Math.max(MIN_DEAD_ZONE_SIZE, val + fb * FLAT_BONUS_STACK_TO_SIZE);
-    return clamp(val + fb, 0, 0.99);
+    var capKey = key + 'Cap';
+    var cap = (boon[capKey] !== undefined) ? boon[capKey] : 0.99;
+    return clamp(val + fb, 0, cap);
+  }
+
+  function getEffectiveDesc(boon) {
+    if (!boon.descFn || !boon.randomValue) return boon.desc;
+    var vals = {};
+    (boon.valueKeys || []).forEach(function(k) {
+      vals[k] = boonNumeric(boon, k);
+    });
+    return boon.descFn(boon.rarity, vals);
+  }
+
+  function getStackedDesc(groupBoons) {
+    if (!groupBoons || !groupBoons.length) return '';
+    if (groupBoons.length === 1) return getEffectiveDesc(groupBoons[0]);
+    var b0 = groupBoons[0];
+    var n = groupBoons.length;
+    if (!b0.descFn || !b0.randomValue) {
+      return b0.desc + ' (\xd7' + n + ')';
+    }
+    var effect = b0.effect;
+    var keys = b0.valueKeys || [];
+    var vals = {};
+
+    if (effect === 'rescue_independent') {
+      var combP = 1 - groupBoons.reduce(function(acc, b) { return acc * (1 - boonNumeric(b, 'chance')); }, 1);
+      return 'On a loss: ' + pct(combP) + '% combined chance to win (\xd7' + n + ' copies, each triggers separately).';
+    }
+    if (effect === 'rescue_fragile') {
+      var combP2 = 1 - groupBoons.reduce(function(acc, b) { return acc * (1 - boonNumeric(b, 'chance')); }, 1);
+      return 'On a loss: ' + pct(combP2) + '% combined chance to win (\xd7' + n + ' copies, fragile).';
+    }
+    if (effect === 'rescue_multiplicative') {
+      vals.chance = 1 - groupBoons.reduce(function(acc, b) { return acc * (1 - boonNumeric(b, 'chance')); }, 1);
+      return 'On a loss: combined ' + pct(vals.chance) + '% multiplicative rescue chance (\xd7' + n + ' copies).';
+    }
+    if (effect === 'rescue_additive') {
+      vals.chance = groupBoons.reduce(function(acc, b) { return acc + boonNumeric(b, 'chance'); }, 0);
+      vals.cap = groupBoons.reduce(function(acc, b) { return Math.max(acc, boonNumeric(b, 'cap')); }, 0);
+      return b0.descFn(b0.rarity, vals);
+    }
+    if (effect === 'tide_shift') {
+      vals.winGrow = groupBoons.reduce(function(acc, b) { return (acc + 1) * (1 + boonNumeric(b, 'winGrow')) - 1; }, 0);
+      vals.loseShrink = 1 - groupBoons.reduce(function(acc, b) { return acc * (1 - boonNumeric(b, 'loseShrink')); }, 1);
+      return b0.descFn(b0.rarity, vals);
+    }
+
+    keys.forEach(function(k) {
+      vals[k] = groupBoons.reduce(function(acc, b) { return acc + boonNumeric(b, k); }, 0);
+    });
+    return b0.descFn(b0.rarity, vals);
   }
 
   function consumeProtected(nb, idx) {
@@ -481,6 +549,19 @@
     return pool[pool.length - 1];
   }
 
+  function pickRareOrBetter(weightMap) {
+    var pool = ['rare', 'legendary'];
+    var total = pool.reduce(function(s, r) { return s + (weightMap[r] || 0); }, 0);
+    if (total <= 0) return 'rare';
+    var rr = Math.random() * total;
+    for (var i = 0; i < pool.length; i++) {
+      var r = pool[i];
+      rr -= weightMap[r] || 0;
+      if (rr <= 0) return r;
+    }
+    return 'legendary';
+  }
+
   function computeRarityWeights(gl, boons, options) {
     var opts = options || {};
     var rarityW = {};
@@ -497,6 +578,11 @@
       var streakBeyondThreshold = nonCommonPickStreak - (COMMON_CATCHUP_MIN_STREAK - 1);
       var commonMult = Math.min(COMMON_CATCHUP_MAX_MULT, 1 + streakBeyondThreshold * COMMON_CATCHUP_PER_EXTRA_NON_COMMON);
       rarityW.common *= commonMult;
+    }
+    if (opts.firstShop) {
+      rarityW.uncommon = (rarityW.uncommon || 0) * 5;
+      rarityW.rare = (rarityW.rare || 0) * 12;
+      rarityW.legendary = (rarityW.legendary || 0) * 5;
     }
     return rarityW;
   }
@@ -573,7 +659,7 @@
         tpl = pickTemplateByRarity(forcedRarity, null);
       }
       if (n === 0 && !tpl && firstShopGuarantee) {
-        tpl = pickTemplateByRarity(pickUncommonOrBetter(rarityW), null);
+        tpl = pickTemplateByRarity(pickRareOrBetter(rarityW), null);
       }
       if (!tpl) {
         var pr = pickRarity(rarityW);
@@ -1038,5 +1124,6 @@
     tryRescue: tryRescue,
     enforceMinimumLoseAreaAfterSpin: enforceMinimumLoseAreaAfterSpin,
     applyBoon: applyBoon,
+    getStackedDesc: getStackedDesc,
   };
 })(window);

@@ -95,6 +95,7 @@
         CX, CY, R, LAND, BOONS, RC, INIT_TILES,
         slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
         pickWeighted, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
+        getStackedDesc,
       } = window.Pick3Logic;
 
     // BoonTag — tooltip via CSS class toggle + hover, no portal
@@ -415,6 +416,35 @@
       var flippedMap = {};
       flippedTiles.forEach(function(id) { flippedMap[id] = true; });
 
+      // Build grouped display boons: collapse same-group boons into one icon
+      var displayBoonGroups = (function() {
+        var map = {};
+        var order = [];
+        shownBoons.forEach(function(b) {
+          var key = b.group || b.id;
+          if (!map[key]) { map[key] = []; order.push(key); }
+          map[key].push(b);
+        });
+        return order.map(function(key) {
+          var grp = map[key];
+          var first = grp[0];
+          var n = grp.length;
+          var totalCharges = grp.reduce(function(sum, b) { return sum + (b.charges || 0); }, 0);
+          return Object.assign({}, first, {
+            name: first.name + (n > 1 ? ' \xd7' + n : ''),
+            desc: getStackedDesc(grp),
+            charges: totalCharges,
+          });
+        });
+      })();
+
+      // Determine which group is shaking for highlight
+      var shakingGroupKey = null;
+      if (shakingBoon) {
+        var foundShaking = shownBoons.find(function(b) { return b.iid === shakingBoon; });
+        if (foundShaking) shakingGroupKey = foundShaking.group || foundShaking.id;
+      }
+
       var reorderBoonsByIid = useCallback(function(fromIid, toIid) {
         if (!fromIid || !toIid || fromIid === toIid) return;
         setBoons(function(prev) {
@@ -654,7 +684,7 @@
             </div>
 
             {/* Boon stack */}
-            {shownBoons.length > 0 && (
+            {displayBoonGroups.length > 0 && (
               <div style={{
                 marginTop: '10px', width: '100%', maxWidth: '680px',
                 background: 'rgba(8,8,8,0.9)', border: '1px solid #1e1e1e',
@@ -664,12 +694,12 @@
                   BOON STACK &mdash; DRAG TO REORDER | HOVER OR CLICK TO INSPECT
                 </div>
                 <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                  {shownBoons.map(function(b, i) {
+                  {displayBoonGroups.map(function(b) {
                     return (
                       <BoonTag
                         key={b.iid}
                         b={b}
-                        shaking={shakingBoon === b.iid}
+                        shaking={shakingGroupKey !== null && (b.group || b.id) === shakingGroupKey}
                         draggable={true}
                         dropTarget={dragOverIid === b.iid}
                         onPointerDown={function(e) { e.stopPropagation(); startDragBoon(e, b.iid); }}
@@ -836,8 +866,8 @@
                         FINAL BOON STACK
                       </div>
                       <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        {shownBoons.map(function(b, i) {
-                          return <BoonTag key={'go_' + (b.iid || b.id) + '_' + i} b={b} large={true} />;
+                        {displayBoonGroups.map(function(b) {
+                          return <BoonTag key={'go_' + b.iid} b={b} large={true} />;
                         })}
                       </div>
                     </div>
