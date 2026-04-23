@@ -195,6 +195,9 @@
           Show run debug
         </label>
         <button id="runBtn">Run Simulation</button>
+        <label for="permCountInput" class="control-label">Permutations</label>
+        <input id="permCountInput" type="number" min="1" step="100" value="500" />
+        <button id="permBtn">Run Permutations</button>
         <a href="./index.html" style="color:#6ea8ff;text-align:right;">Back to game</a>
       </div>
     <div class="grid">
@@ -205,7 +208,7 @@
       <div class="panel">
         <div id="plotDescription" class="sub">Dot plot of simulation runs</div>
         <canvas id="plot" width="900" height="560" role="img" aria-label="Dot plot of simulation runs."></canvas>
-        <div id="status" role="status" aria-live="polite"></div>
+        <div id="status" role="status" aria-live="polite"></div><span id="spinner" class="spinner" aria-hidden="true"></span>
         <div id="runDebugSub" class="sub run-debug-sub">Run debug: each picked boon is boxed by its own rarity, with an outer box showing the highest rarity offered in that shop</div>
         <div id="runLog" role="log" aria-live="polite" aria-label="Simulation run log"></div>
       </div>
@@ -244,6 +247,9 @@
     var showDebugInput = document.getElementById('showDebugInput');
     var plotDescriptionEl = document.getElementById('plotDescription');
     var runBtn = document.getElementById('runBtn');
+    var permBtn = document.getElementById('permBtn');
+    var permCountInput = document.getElementById('permCountInput');
+    var spinner = document.getElementById('spinner');
     var statusEl = document.getElementById('status');
     var runDebugSubEl = document.getElementById('runDebugSub');
     var runLogEl = document.getElementById('runLog');
@@ -252,6 +258,7 @@
 
     var dragItem = null;
     var results = [];
+    var boonRatings = {};
     var boonById = BASE_BOONS.reduce(function(map, boon) {
       map[boon.id] = boon;
       return map;
@@ -361,11 +368,18 @@
         var li = document.createElement('li');
         li.draggable = true;
         li.dataset.id = b.id;
+        var ratingHtml = '';
+        if (boonRatings[b.id] != null) {
+          var br = boonRatings[b.id];
+          var rPct = br.maxPossible > 0 ? Math.round(br.bordaScore / br.maxPossible * 100) : 0;
+          ratingHtml = '<div class="rating">pairwise wins: ' + br.bordaScore + ' / ' + br.maxPossible + ' (' + rPct + '%)</div>';
+        }
         li.innerHTML =
           '<div class="row">' +
             '<strong style="color:' + RC[b.rarity] + '">' + (i + 1) + '. ' + b.name + '</strong>' +
             '<span style="color:#aaa">value ' + (orderedBoons.length - i) + '</span>' +
           '</div>' +
+          ratingHtml +
           '<div class="meta">' + formatBoonMeta(b) + '</div>';
         boonList.appendChild(li);
       }
@@ -674,6 +688,162 @@
       requestAnimationFrame(step);
     }
 
+    // ── Permutation search via pairwise tournament graph ─────────────────────
+    // For each random permutation we record avg spins and accumulate, for every
+    // ordered pair (A ranked above B), the avg-spins contribution.  After all
+    // samples we build a directed preference graph (edge A→B when A-before-B
+    // yields higher expected spins) and rank boons by their Borda score (count
+    // of pairwise wins), giving a graph-theoretically optimal ordering.
+
+    function shuffleArray(arr) {
+      var a = arr.slice();
+      for (var i = a.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+      }
+      return a;
+    }
+
+    function runPermutations(numPerms, runsPerPerm, simOptions) {
+      var boonIds = orderedBoons.map(function(b) { return b.id; });
+      var n = boonIds.length;
+
+      // pairData[idA][idB].{totalSpins, count}: accumulated avg-spins across
+      // all sampled permutations in which boon A was ranked above boon B.
+      var pairData = {};
+      boonIds.forEach(function(idA) {
+        pairData[idA] = {};
+        boonIds.forEach(function(idB) {
+          if (idA !== idB) pairData[idA][idB] = { totalSpins: 0, count: 0 };
+        });
+      });
+
+      var done = 0;
+      var bestPerm = null;
+      var bestAvgSpins = -Infinity;
+
+      permBtn.disabled = true;
+      runBtn.disabled = true;
+      spinner.classList.add('active');
+      statusEl.textContent = 'Running permutations 0 / ' + numPerms + '\u2026';
+
+      function step() {
+        var frameStart = performance.now();
+        while (done < numPerms && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
+          var permOrder = shuffleArray(orderedBoons);
+
+          var prioMap = {};
+          for (var i = 0; i < permOrder.length; i++) {
+            prioMap[permOrder[i].id] = permOrder.length - i;
+          }
+
+          var totalSpins = 0;
+          for (var r = 0; r < runsPerPerm; r++) {
+            totalSpins += runSingle(prioMap, simOptions).spins;
+          }
+          var avgSpins = totalSpins / runsPerPerm;
+
+          // Accumulate pairwise stats in O(N²/2) per permutation.
+          // In a uniform random permutation, E[spins | A before B] vs
+          // E[spins | B before A] gives an unbiased causal estimate of
+          // whether ranking A above B is beneficial.
+          for (var i = 0; i < permOrder.length; i++) {
+            for (var j = i + 1; j < permOrder.length; j++) {
+              var idFirst  = permOrder[i].id; // ranked higher
+              var idSecond = permOrder[j].id; // ranked lower
+              pairData[idFirst][idSecond].totalSpins += avgSpins;
+              pairData[idFirst][idSecond].count      += 1;
+            }
+          }
+
+          if (avgSpins > bestAvgSpins) {
+            bestAvgSpins = avgSpins;
+            bestPerm = permOrder.slice();
+          }
+          done++;
+        }
+
+        statusEl.textContent = 'Running permutations ' + done + ' / ' + numPerms + '\u2026';
+        if (done < numPerms) {
+          requestAnimationFrame(step);
+        } else {
+          finishPermutations(pairData, bestAvgSpins, boonIds, n);
+        }
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    function finishPermutations(pairData, bestAvgSpins, boonIds, n) {
+      // Build directed preference graph and compute Borda scores.
+      // Edge A→B exists when E[spins | A before B] > E[spins | B before A].
+      // Borda score for A = |{B : A beats B pairwise}|.
+      var bordaScores = {};
+      boonIds.forEach(function(id) { bordaScores[id] = 0; });
+
+      var numEdges = 0;
+      for (var ai = 0; ai < boonIds.length; ai++) {
+        for (var bi = ai + 1; bi < boonIds.length; bi++) {
+          var idA = boonIds[ai];
+          var idB = boonIds[bi];
+          var statAB = pairData[idA] && pairData[idA][idB]; // A ranked above B
+          var statBA = pairData[idB] && pairData[idB][idA]; // B ranked above A
+          if (!statAB || !statBA || statAB.count === 0 || statBA.count === 0) continue;
+          var avgAB = statAB.totalSpins / statAB.count;
+          var avgBA = statBA.totalSpins / statBA.count;
+          if (avgAB > avgBA) { bordaScores[idA]++; numEdges++; }
+          else if (avgBA > avgAB) { bordaScores[idB]++; numEdges++; }
+        }
+      }
+
+      // Sort boons by Borda score descending — graph-theoretically optimal ordering.
+      orderedBoons = orderedBoons.slice().sort(function(a, b) {
+        return (bordaScores[b.id] || 0) - (bordaScores[a.id] || 0);
+      });
+
+      var maxPossible = boonIds.length - 1;
+      boonRatings = {};
+      boonIds.forEach(function(id) {
+        boonRatings[id] = { bordaScore: bordaScores[id] || 0, maxPossible: maxPossible };
+      });
+
+      renderBoonList();
+
+      var totalPairs = Math.round(boonIds.length * (boonIds.length - 1) / 2);
+      statusEl.textContent =
+        'Permutations done. Best sampled avg spins: ' + bestAvgSpins.toFixed(2) +
+        ' \u00b7 Borda ordering applied (' + boonIds.length + ' nodes, ' +
+        totalPairs + ' pairwise edges analysed).';
+      spinner.classList.remove('active');
+      permBtn.disabled = false;
+      runBtn.disabled = false;
+    }
+
+    permBtn.addEventListener('click', function() {
+      var numPerms = parseInt(permCountInput.value, 10);
+      var maxSpinsPerRun = parseInt(maxSpinsInput.value, 10);
+      var maxDeadZoneRetries = parseInt(deadZoneRetriesInput.value, 10);
+      var runsPerPerm = Math.max(20, Math.floor(parseInt(runsInput.value, 10) / 8));
+      if (!Number.isFinite(numPerms) || numPerms < 1) {
+        statusEl.textContent = 'Enter a valid number of permutations.';
+        return;
+      }
+      if (!Number.isFinite(maxSpinsPerRun) || maxSpinsPerRun < 1) {
+        statusEl.textContent = 'Enter a valid max spins per run (minimum 1).';
+        return;
+      }
+      if (!Number.isFinite(maxDeadZoneRetries) || maxDeadZoneRetries < 0) {
+        statusEl.textContent = 'Enter valid dead zone retries (minimum 0).';
+        return;
+      }
+      runPermutations(numPerms, runsPerPerm, {
+        maxSpinsPerRun: maxSpinsPerRun,
+        maxDeadZoneRetries: maxDeadZoneRetries,
+        showDebug: false
+      });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
     boonList.addEventListener('dragstart', function(e) {
       var li = e.target.closest('li');
       if (!li) return;
