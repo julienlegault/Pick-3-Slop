@@ -95,8 +95,50 @@
         CX, CY, R, LAND, BOONS, RC, INIT_TILES,
         slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
         pickWeighted, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
-        getStackedDesc,
+        getStackedDesc, instantiateTemplate,
       } = window.Pick3Logic;
+
+      // Build a template map for boon deserialization
+      var BOON_TEMPLATE_MAP = {};
+      BOONS.forEach(function(b) { BOON_TEMPLATE_MAP[b.id] = b; });
+
+      // ── Persistent storage helpers ──────────────────────────────────────────
+      var RUN_KEY  = 'pick3_run';
+      var COLL_KEY = 'pick3_collection';
+
+      function loadRunState() {
+        try { var s = localStorage.getItem(RUN_KEY); return s ? JSON.parse(s) : null; }
+        catch(e) { return null; }
+      }
+      function saveRunState(state) {
+        try { localStorage.setItem(RUN_KEY, JSON.stringify(state)); } catch(e) {}
+      }
+      function clearRunState() {
+        try { localStorage.removeItem(RUN_KEY); } catch(e) {}
+      }
+      function loadCollection() {
+        try { var s = localStorage.getItem(COLL_KEY); return new Set(s ? JSON.parse(s) : []); }
+        catch(e) { return new Set(); }
+      }
+      function saveCollection(col) {
+        try { localStorage.setItem(COLL_KEY, JSON.stringify(Array.from(col))); } catch(e) {}
+      }
+
+      // Serialize a boon to plain JSON (strips functions)
+      function serializeBoon(b) {
+        var out = {};
+        Object.keys(b).forEach(function(k) { if (typeof b[k] !== 'function') out[k] = b[k]; });
+        return out;
+      }
+      // Reconstruct a boon from its serialized form by re-attaching template functions
+      function deserializeBoon(saved) {
+        if (!saved || !saved.id) return null;
+        var tpl = BOON_TEMPLATE_MAP[saved.id];
+        if (!tpl) return null;
+        var fresh = instantiateTemplate(tpl);
+        Object.keys(saved).forEach(function(k) { fresh[k] = saved[k]; });
+        return fresh;
+      }
 
     // BoonTag — tooltip via CSS class toggle + hover, no portal
     function BoonTag(props) {
@@ -201,6 +243,8 @@
       var _s15 = useState(null);       var dragIid = _s15[0]; var setDragIid = _s15[1];
       var _s16 = useState(null);       var dragOverIid = _s16[0]; var setDragOverIid = _s16[1];
       var _s17 = useState(0);          var nonCommonPickStreak = _s17[0]; var setNonCommonPickStreak = _s17[1];
+      var _s18 = useState(loadCollection); var collection = _s18[0]; var setCollection = _s18[1];
+      var _s19 = useState(false);      var showCollection = _s19[0]; var setShowCollection = _s19[1];
 
       var spinRef = useRef(null);
       var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null), t4 = useRef([]);
@@ -374,6 +418,39 @@
         };
       }, []);
 
+      // Restore saved run state on mount
+      useEffect(function() {
+        var saved = loadRunState();
+        if (!saved) return;
+        try {
+          var restoredBoons = (saved.boons || []).map(deserializeBoon).filter(Boolean);
+          setTiles(saved.tiles || INIT_TILES);
+          setBoons(restoredBoons);
+          setSc(saved.sc || 0);
+          setGl(saved.gl || 0);
+          setNid(saved.nid || 6);
+          setShopsSeen(saved.shopsSeen || 0);
+          setNonCommonPickStreak(saved.nonCommonPickStreak || 0);
+          setWdeg(saved.wdeg || 0);
+        } catch(e) { clearRunState(); }
+      }, []);
+
+      // Persist run state whenever core game state changes
+      useEffect(function() {
+        if (phase === 'game_over') { clearRunState(); return; }
+        if (phase !== 'idle') return;
+        try {
+          saveRunState({
+            tiles: tiles,
+            boons: boons.map(serializeBoon),
+            sc: sc, gl: gl, nid: nid,
+            shopsSeen: shopsSeen,
+            nonCommonPickStreak: nonCommonPickStreak,
+            wdeg: wdeg,
+          });
+        } catch(e) {}
+      }, [tiles, boons, sc, gl, nid, shopsSeen, nonCommonPickStreak, wdeg, phase]);
+
       var pick = useCallback(function(boon) {
         var res = applyBoon(boon, tiles, boons, nid);
         setTiles(res.tiles);
@@ -394,6 +471,12 @@
         setNonCommonPickStreak(function(streak) {
           return boon.rarity === 'common' ? 0 : (streak + 1);
         });
+        setCollection(function(prev) {
+          var next = new Set(prev);
+          next.add(boon.id);
+          saveCollection(next);
+          return next;
+        });
       }, [tiles, boons, nid]);
 
       var rerollChoices = useCallback(function() {
@@ -411,6 +494,7 @@
         doneRef.current = true;
         revDone.current = true;
         spinRef.current = null;
+        clearRunState();
         setTiles(INIT_TILES);
         setBoons([]); setSc(0); setGl(0); setPhase('idle');
         setWdeg(0); setAnim(false); setRtile(null);
@@ -514,6 +598,8 @@
       var da   = calcAngles(dl);
       var wins = tiles.filter(function(t) { return t.type === 'win'; }).length;
       var isOverlay = phase === 'boon_select' || phase === 'game_over';
+      var totalBoons = BOONS.length;
+      var seenBoons  = BOONS.filter(function(b) { return collection.has(b.id); }).length;
 
       // Divider-suppression: skip the stroke between two adjacent same-type tiles when
       // the smaller tile's outer arc is < DIVIDER_SKIP_PX screen-pixels.
@@ -587,13 +673,31 @@
             transition: 'filter .35s',
             pointerEvents: isOverlay ? 'none' : 'auto',
           }}>
-            <h1 style={{
-              fontSize: 'clamp(1.25rem, 3.2vw, 1.72rem)', letterSpacing: '.28em',
-              color: '#D4AF37', margin: '0 0 4px', fontWeight: 700,
-              textShadow: '0 0 24px rgba(212,175,55,.22)',
-            }}>PICK 3 SLOP</h1>
-            <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#2c2c2c', letterSpacing: '.32em', marginBottom: '12px' }}>
-              SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
+            {/* Header row with title, subtitle, and collection button */}
+            <div style={{ position: 'relative', width: '100%', maxWidth: '680px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '0' }}>
+              <h1 style={{
+                fontSize: 'clamp(1.25rem, 3.2vw, 1.72rem)', letterSpacing: '.28em',
+                color: '#D4AF37', margin: '0 0 4px', fontWeight: 700,
+                textShadow: '0 0 24px rgba(212,175,55,.22)',
+              }}>PICK 3 SLOP</h1>
+              <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#2c2c2c', letterSpacing: '.32em', marginBottom: '12px' }}>
+                SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
+              </div>
+              <button
+                onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}
+                style={{
+                  position: 'absolute', top: '2px', right: '0',
+                  background: 'transparent', border: '1px solid #2a2a2a',
+                  color: '#3a3a3a', padding: '4px 10px',
+                  fontSize: '.5rem', fontFamily: "'Cinzel', serif",
+                  letterSpacing: '.22em', cursor: 'pointer',
+                  transition: 'color .15s, border-color .15s',
+                }}
+                onMouseEnter={function(e) { e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.borderColor = '#D4AF37'; }}
+                onMouseLeave={function(e) { e.currentTarget.style.color = '#3a3a3a'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
+              >
+                COLLECTION {seenBoons}/{totalBoons}
+              </button>
             </div>
 
             {/* Wheel */}
@@ -894,6 +998,21 @@
                   >
                     PLAY AGAIN
                   </button>
+                  <button
+                    onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}
+                    style={{
+                      display: 'block', margin: '12px auto 0',
+                      padding: '7px 22px', background: 'transparent',
+                      border: '1px solid #2a2a2a', color: '#444',
+                      fontSize: '.6rem', fontFamily: "'Cinzel', serif",
+                      letterSpacing: '.28em', cursor: 'pointer',
+                      transition: 'color .15s, border-color .15s',
+                    }}
+                    onMouseEnter={function(e) { e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.borderColor = '#D4AF37'; }}
+                    onMouseLeave={function(e) { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
+                  >
+                    VIEW COLLECTION ({seenBoons}/{totalBoons})
+                  </button>
                 </div>
               )}
             </div>
@@ -913,6 +1032,95 @@
                 animation: 'zr .5s cubic-bezier(0.34, 1.56, 0.64, 1), growPulse 1s .5s infinite',
               }}>
                 WHEEL GROWS
+              </div>
+            </div>
+          )}
+
+          {/* Collection modal */}
+          {showCollection && (
+            <div
+              style={{
+                position: 'fixed', inset: 0, zIndex: 200,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(6,6,6,.92)',
+                padding: '14px',
+                animation: 'overlayIn .3s ease',
+              }}
+              onClick={function() { setShowCollection(false); }}
+            >
+              <div
+                style={{
+                  width: '100%', maxWidth: '700px',
+                  background: '#111', border: '1px solid #2a2a2a',
+                  borderRadius: '6px', padding: '18px 16px',
+                  maxHeight: '85vh', overflowY: 'auto',
+                  animation: 'fu .3s ease',
+                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
+                }}
+                onClick={function(e) { e.stopPropagation(); }}
+              >
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                  <div>
+                    <div style={{ fontSize: '.6rem', letterSpacing: '.36em', color: '#383838', marginBottom: '4px' }}>BOON COLLECTION</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#555', letterSpacing: '.2em' }}>
+                      {seenBoons} / {totalBoons} DISCOVERED
+                    </div>
+                  </div>
+                  <button
+                    onClick={function() { setShowCollection(false); }}
+                    style={{
+                      background: 'none', border: '1px solid #333', color: '#666',
+                      padding: '5px 12px', cursor: 'pointer',
+                      fontSize: '.6rem', letterSpacing: '.2em', fontFamily: "'Cinzel', serif",
+                    }}
+                  >
+                    CLOSE
+                  </button>
+                </div>
+
+                {/* Progress bar */}
+                <div style={{ height: '2px', background: '#1a1a1a', borderRadius: '1px', marginBottom: '14px' }}>
+                  <div style={{
+                    height: '100%',
+                    width: (totalBoons > 0 ? (seenBoons / totalBoons * 100) : 0) + '%',
+                    background: '#D4AF37', borderRadius: '1px', transition: 'width .4s',
+                  }} />
+                </div>
+
+                {/* Boon grid — sorted by rarity then name */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(128px, 1fr))', gap: '6px' }}>
+                  {(function() {
+                    var rarityOrder = ['common', 'uncommon', 'rare', 'legendary'];
+                    var sorted = BOONS.slice().sort(function(a, b) {
+                      var ri = rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity);
+                      if (ri !== 0) return ri;
+                      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+                    });
+                    return sorted.map(function(b) {
+                      var seen = collection.has(b.id);
+                      var c = RC[b.rarity];
+                      return (
+                        <div
+                          key={b.id}
+                          style={{
+                            border: '1px solid ' + (seen ? c + '88' : '#1c1c1c'),
+                            borderRadius: '3px',
+                            padding: '8px 9px',
+                            background: seen ? c + '0d' : '#080808',
+                          }}
+                        >
+                          <div style={{ fontSize: '.46rem', color: seen ? c : '#2a2a2a', letterSpacing: '.28em', textTransform: 'uppercase', marginBottom: '4px' }}>
+                            {b.rarity}
+                          </div>
+                          <div style={{ fontSize: '.64rem', color: seen ? '#ccc' : '#2a2a2a', fontFamily: "'Cinzel', serif", fontWeight: seen ? 600 : 400, lineHeight: 1.2 }}>
+                            {seen ? b.name : '???'}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
             </div>
           )}
