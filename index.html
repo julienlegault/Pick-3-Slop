@@ -181,7 +181,6 @@
     }
 
     function App() {
-      var MAX_DEAD_ZONE_RETRIES = 18;
       var SHAKE_INTERVAL_MS = 120;
       var SHAKE_CLEAR_DELAY_MS = 140;
       var SPIN_INTERACT_GUARD_MS = 80;
@@ -298,8 +297,6 @@
         var layout = buildLayout(spinTiles, spinBoons, true);
         var angles = calcAngles(layout);
         var idx    = pickWeighted(layout);
-        var guard = MAX_DEAD_ZONE_RETRIES;
-        while (layout[idx].type === 'dead' && guard-- > 0) idx = pickWeighted(layout);
         var tc     = angles[idx].center;
         var hs     = (angles[idx].end - angles[idx].start) / 2;
         var cm     = wdeg % 360;
@@ -529,7 +526,7 @@
       // Display switches to scientific notation above this tile count (100 trillion).
       var SCIENTIFIC_NOTATION_THRESHOLD = 1e14;
       function tileColor(type) {
-        return type === 'dead' ? '#3a2f45' : (type === 'win' ? '#d4d4d4' : '#1e1e1e');
+        return type === 'win' ? '#d4d4d4' : '#1e1e1e';
       }
       function formatTileCount(n) {
         if (n >= SCIENTIFIC_NOTATION_THRESHOLD) return n.toExponential(2);

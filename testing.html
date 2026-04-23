@@ -161,8 +161,6 @@
         <input id="runsInput" type="number" min="1" step="1" value="400" />
         <label for="maxSpinsInput" class="control-label">Max spins per run</label>
         <input id="maxSpinsInput" type="number" min="1" step="1" value="75" />
-        <label for="deadZoneRetriesInput" class="control-label">Dead zone retries</label>
-        <input id="deadZoneRetriesInput" type="number" min="0" step="1" value="5" />
         <label for="xMetricSelect" class="control-label">X axis</label>
         <select id="xMetricSelect">
           <option value="spins">number of spins</option>
@@ -240,7 +238,6 @@
     var boonList = document.getElementById('boonList');
     var runsInput = document.getElementById('runsInput');
     var maxSpinsInput = document.getElementById('maxSpinsInput');
-    var deadZoneRetriesInput = document.getElementById('deadZoneRetriesInput');
     var xMetricSelect = document.getElementById('xMetricSelect');
     var yMetricSelect = document.getElementById('yMetricSelect');
     var colorMetricSelect = document.getElementById('colorMetricSelect');
@@ -482,8 +479,6 @@
         boons = prep.boons;
         var layout = buildLayout(tiles, boons, true);
         var idx = pickWeighted(layout);
-        var guard = options.maxDeadZoneRetries;
-        while (layout[idx].type === 'dead' && guard-- > 0) idx = pickWeighted(layout);
         var result = layout[idx].type;
 
         if (result === 'lose') {
@@ -822,7 +817,6 @@
     permBtn.addEventListener('click', function() {
       var numPerms = parseInt(permCountInput.value, 10);
       var maxSpinsPerRun = parseInt(maxSpinsInput.value, 10);
-      var maxDeadZoneRetries = parseInt(deadZoneRetriesInput.value, 10);
       // Use at least 20 runs per permutation for a stable mean; divide the
       // configured run count by 8 so total simulation work stays comparable
       // to a normal single-ordering run (500 perms × runs/8 ≈ 62.5× runs).
@@ -835,13 +829,8 @@
         statusEl.textContent = 'Enter a valid max spins per run (minimum 1).';
         return;
       }
-      if (!Number.isFinite(maxDeadZoneRetries) || maxDeadZoneRetries < 0) {
-        statusEl.textContent = 'Enter valid dead zone retries (minimum 0).';
-        return;
-      }
       runPermutations(numPerms, runsPerPerm, {
         maxSpinsPerRun: maxSpinsPerRun,
-        maxDeadZoneRetries: maxDeadZoneRetries,
         showDebug: false
       });
     });
@@ -880,7 +869,6 @@
     runBtn.addEventListener('click', function() {
       var runs = parseInt(runsInput.value, 10);
       var maxSpinsPerRun = parseInt(maxSpinsInput.value, 10);
-      var maxDeadZoneRetries = parseInt(deadZoneRetriesInput.value, 10);
       if (!Number.isFinite(runs) || runs < 1) {
         statusEl.textContent = 'Enter a valid positive number of runs.';
         return;
@@ -889,14 +877,9 @@
         statusEl.textContent = 'Enter a valid max spins per run (minimum 1).';
         return;
       }
-      if (!Number.isFinite(maxDeadZoneRetries) || maxDeadZoneRetries < 0) {
-        statusEl.textContent = 'Enter valid dead zone retries (minimum 0).';
-        return;
-      }
       var metrics = getSelectedMetrics();
       runSimulation(runs, {
         maxSpinsPerRun: maxSpinsPerRun,
-        maxDeadZoneRetries: maxDeadZoneRetries,
         showDebug: showDebugInput.checked,
         metrics: metrics
       });
