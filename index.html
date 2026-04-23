@@ -16,7 +16,7 @@
 
     @keyframes fu        { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
     @keyframes zr        { 0%{transform:scale(.15);opacity:0;} 65%{transform:scale(1.07);opacity:1;} 100%{transform:scale(1);opacity:1;} }
-    @keyframes blink     { 0%,100%{opacity:.22;} 50%{opacity:.82;} }
+    @keyframes blink     { 0%,100%{opacity:.5;} 50%{opacity:1;} }
     @keyframes overlayIn { from{opacity:0;} to{opacity:1;} }
     @keyframes growPulse { 0%,100%{box-shadow:0 0 18px rgba(212,175,55,.22);} 50%{box-shadow:0 0 52px rgba(212,175,55,.72),0 0 90px rgba(212,175,55,.2);} }
     @keyframes tileReveal {
@@ -683,7 +683,7 @@
                 color: '#D4AF37', margin: '0 0 4px', fontWeight: 700,
                 textShadow: '0 0 24px rgba(212,175,55,.22)',
               }}>PICK 3 SLOP</h1>
-              <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#2c2c2c', letterSpacing: '.32em', marginBottom: '12px' }}>
+              <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#888', letterSpacing: '.32em', marginBottom: '12px' }}>
                 SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
               </div>
               <button
@@ -691,13 +691,13 @@
                 style={{
                   position: 'absolute', top: '2px', right: '0',
                   background: 'transparent', border: '1px solid #2a2a2a',
-                  color: '#3a3a3a', padding: '4px 10px',
+                  color: '#888', padding: '4px 10px',
                   fontSize: '.5rem', fontFamily: "'Cinzel', serif",
                   letterSpacing: '.22em', cursor: 'pointer',
                   transition: 'color .15s, border-color .15s',
                 }}
                 onMouseEnter={function(e) { e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.borderColor = '#D4AF37'; }}
-                onMouseLeave={function(e) { e.currentTarget.style.color = '#3a3a3a'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
+                onMouseLeave={function(e) { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
               >
                 COLLECTION {seenBoons}/{totalBoons}
               </button>
@@ -793,7 +793,7 @@
                 </button>
               )}
               {(phase === 'spinning' || phase === 'reveal') && (
-                <span style={{ fontSize: '.62rem', letterSpacing: '.32em', color: '#2b2b2b', animation: 'blink 1.3s infinite' }}>
+                <span style={{ fontSize: '.62rem', letterSpacing: '.32em', color: '#aaa', animation: 'blink 1.3s infinite' }}>
                   {phase === 'spinning' ? 'CLICK ANYWHERE TO RESOLVE' : 'CLICK TO CONTINUE'}
                 </span>
               )}
@@ -806,7 +806,7 @@
                 background: 'rgba(8,8,8,0.9)', border: '1px solid #1e1e1e',
                 borderRadius: '4px', padding: '8px 11px',
               }}>
-                <div style={{ fontSize: '.5rem', letterSpacing: '.35em', color: '#444', marginBottom: '5px' }}>
+                <div style={{ fontSize: '.5rem', letterSpacing: '.35em', color: '#888', marginBottom: '5px' }}>
                   BOON STACK &mdash; DRAG TO REORDER | HOVER OR CLICK TO INSPECT
                 </div>
                 <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
@@ -903,7 +903,7 @@
                   animation: 'fu .3s ease',
                   boxShadow: '0 8px 48px rgba(0,0,0,.9)',
                 }}>
-                  <div style={{ textAlign: 'center', fontSize: '.6rem', letterSpacing: '.36em', color: '#383838', marginBottom: '12px' }}>
+                  <div style={{ textAlign: 'center', fontSize: '.6rem', letterSpacing: '.36em', color: '#888', marginBottom: '12px' }}>
                     CHOOSE A BOON
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
@@ -914,7 +914,7 @@
                         padding: '7px 14px',
                         background: 'transparent',
                         border: '1px solid ' + (shopRerolls > 0 ? '#D4AF37' : '#444'),
-                        color: shopRerolls > 0 ? '#D4AF37' : '#555',
+                        color: shopRerolls > 0 ? '#D4AF37' : '#888',
                         letterSpacing: '.18em',
                         fontSize: '.56rem',
                         cursor: shopRerolls > 0 ? 'pointer' : 'not-allowed',
@@ -946,7 +946,7 @@
                           <div style={{ fontSize: '.78rem', color: '#e0e0e0', marginBottom: '7px', fontWeight: '600', lineHeight: 1.2 }}>
                             {b.name}
                           </div>
-                          <div style={{ fontSize: '.62rem', color: '#666', lineHeight: '1.45', fontFamily: 'Georgia, serif' }}>
+                          <div style={{ fontSize: '.62rem', color: '#888', lineHeight: '1.45', fontFamily: 'Georgia, serif' }}>
                             {b.desc}
                           </div>
                         </div>
@@ -973,12 +973,12 @@
                   }}>
                     ELIMINATED
                   </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: '.9rem', color: '#333', letterSpacing: '.35em', marginBottom: '20px' }}>
+                  <div style={{ fontFamily: 'monospace', fontSize: '.9rem', color: '#888', letterSpacing: '.35em', marginBottom: '20px' }}>
                     {sc} SPINS SURVIVED
                   </div>
                   {shownBoons.length > 0 && (
                     <div style={{ marginBottom: '20px' }}>
-                      <div style={{ fontSize: '.52rem', letterSpacing: '.38em', color: '#222', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '.52rem', letterSpacing: '.38em', color: '#888', marginBottom: '8px' }}>
                         FINAL BOON STACK
                       </div>
                       <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -1006,13 +1006,13 @@
                     style={{
                       display: 'block', margin: '12px auto 0',
                       padding: '7px 22px', background: 'transparent',
-                      border: '1px solid #2a2a2a', color: '#444',
+                      border: '1px solid #2a2a2a', color: '#888',
                       fontSize: '.6rem', fontFamily: "'Cinzel', serif",
                       letterSpacing: '.28em', cursor: 'pointer',
                       transition: 'color .15s, border-color .15s',
                     }}
                     onMouseEnter={function(e) { e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.borderColor = '#D4AF37'; }}
-                    onMouseLeave={function(e) { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
+                    onMouseLeave={function(e) { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
                   >
                     VIEW COLLECTION ({seenBoons}/{totalBoons})
                   </button>
@@ -1065,15 +1065,15 @@
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                   <div>
-                    <div style={{ fontSize: '.6rem', letterSpacing: '.36em', color: '#383838', marginBottom: '4px' }}>BOON COLLECTION</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#555', letterSpacing: '.2em' }}>
+                    <div style={{ fontSize: '.6rem', letterSpacing: '.36em', color: '#888', marginBottom: '4px' }}>BOON COLLECTION</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#888', letterSpacing: '.2em' }}>
                       {seenBoons} / {totalBoons} DISCOVERED
                     </div>
                   </div>
                   <button
                     onClick={function() { setShowCollection(false); }}
                     style={{
-                      background: 'none', border: '1px solid #333', color: '#666',
+                      background: 'none', border: '1px solid #333', color: '#888',
                       padding: '5px 12px', cursor: 'pointer',
                       fontSize: '.6rem', letterSpacing: '.2em', fontFamily: "'Cinzel', serif",
                     }}
