@@ -229,15 +229,25 @@
             boonsForShop = d.postSpinGrowth.boons;
             growthAdjustedLevel += 1;
             setGl(function(g) { return g + 1; });
+            var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
+              firstShop: d.shopsSeen === 0,
+              nonCommonPickStreak: d.nonCommonPickStreak,
+            });
+            setBoons(shop.boons);
+            setChoices(shop.choices);
+            setShopsSeen(function(n) { return n + 1; });
+            setPhase('growing');
+            t3.current = setTimeout(function() { setPhase('boon_select'); }, 1900);
+          } else {
+            var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
+              firstShop: d.shopsSeen === 0,
+              nonCommonPickStreak: d.nonCommonPickStreak,
+            });
+            setBoons(shop.boons);
+            setChoices(shop.choices);
+            setShopsSeen(function(n) { return n + 1; });
+            setPhase('boon_select');
           }
-          var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
-            firstShop: d.shopsSeen === 0,
-            nonCommonPickStreak: d.nonCommonPickStreak,
-          });
-          setBoons(shop.boons);
-          setChoices(shop.choices);
-          setShopsSeen(function(n) { return n + 1; });
-          setPhase('boon_select');
         }
         else setPhase('game_over');
       }, []);
@@ -640,20 +650,22 @@
                 <circle cx={CX} cy={CY} r={5.5} fill="#3a3a3a" />
               </svg>
 
-              {/* Tile counter — static overlay (does not rotate with wheel) */}
-              <div style={{
-                position: 'absolute', top: '50%', left: '50%',
-                transform: 'translate(-50%, -50%)',
-                pointerEvents: 'none', zIndex: 5,
-                color: 'rgba(80,80,80,0.88)',
-                fontFamily: "'Cinzel', serif", fontWeight: '700',
-                fontSize: 'clamp(0.75rem, 3.5vw, 1.5rem)',
-                letterSpacing: '.06em', textAlign: 'center',
-                textShadow: '0 1px 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9)',
-                userSelect: 'none',
-              }}>
-                {formatTileCount(tiles.length)}
-              </div>
+              {/* Tile counter — static overlay (does not rotate with wheel), shown after 3rd growth */}
+              {gl >= 3 && (
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  pointerEvents: 'none', zIndex: 5,
+                  color: '#D4AF37',
+                  fontFamily: "'Cinzel', serif", fontWeight: '700',
+                  fontSize: 'clamp(1rem, 5vw, 2rem)',
+                  letterSpacing: '.06em', textAlign: 'center',
+                  textShadow: '0 1px 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9)',
+                  userSelect: 'none',
+                }}>
+                  {formatTileCount(tiles.length)}
+                </div>
+              )}
             </div>
 
             {/* Spin / hint */}

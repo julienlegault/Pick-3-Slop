@@ -22,15 +22,15 @@
   var COMMON_CATCHUP_MIN_STREAK = 2;
   var COMMON_CATCHUP_PER_EXTRA_NON_COMMON = 0.45;
   var COMMON_CATCHUP_MAX_MULT = 3.0;
-  // Wheel-growth difficulty curve: early wheels are forgiving, then trend harder over time.
+  // Wheel-growth difficulty curve: grows progressively harder each time.
+  // Loss ratios: 1/3, 4/9, 1/2, 2/3, 3/4, …, 95% at the 10th growth.
   var WHEEL_GROWTH_MULTIPLIER = 3;
-  var EARLY_GROWTH_LEVEL_LIMIT = 3;
-  var MID_GROWTH_LEVEL_LIMIT = 5;
-  var MID_GROWTH_DECAY_START_LEVEL = MID_GROWTH_LEVEL_LIMIT - 1;
-  var EARLY_GROWTH_WIN_RATIO = 2 / 3;
-  var MID_GROWTH_WIN_RATIO = 5 / 9;
-  var MIN_GROWTH_WIN_RATIO = 1 / 3;
-  var GROWTH_WIN_RATIO_STEP = 1 / 18;
+  // Win ratios indexed by growthLevel (0 = first growth, 1 = second, …)
+  var GROWTH_WIN_RATIOS = [2/3, 5/9, 1/2, 1/3, 1/4];
+  var GROWTH_WIN_RATIO_LATE_START_LEVEL = 4;   // growthLevel where late curve begins
+  var GROWTH_WIN_RATIO_LATE_END_LEVEL = 9;     // growthLevel of the 10th growth
+  var GROWTH_WIN_RATIO_LATE_START = 0.25;      // win ratio at late-start level
+  var GROWTH_WIN_RATIO_LATE_END = 0.05;        // win ratio at late-end level (95% loss)
   var MIN_POST_SPIN_LOSE_AREA_RATIO = 0.005;
 
   function rarityMult(rarity, gl) {
@@ -954,11 +954,11 @@
   }
 
   function growthWinRatio(growthLevel) {
-    // First growth bands keep stronger win density (2/3 then ~5/9), then decay toward 1/3 floor.
-    if (growthLevel < EARLY_GROWTH_LEVEL_LIMIT) return EARLY_GROWTH_WIN_RATIO;
-    if (growthLevel < MID_GROWTH_LEVEL_LIMIT) return MID_GROWTH_WIN_RATIO;
-    var reduced = MID_GROWTH_WIN_RATIO - ((growthLevel - MID_GROWTH_DECAY_START_LEVEL) * GROWTH_WIN_RATIO_STEP);
-    return clamp(reduced, MIN_GROWTH_WIN_RATIO, MID_GROWTH_WIN_RATIO);
+    // Lookup table for first five growths, then linear interpolation toward 5% win at level 9+.
+    if (growthLevel < GROWTH_WIN_RATIOS.length) return GROWTH_WIN_RATIOS[growthLevel];
+    var span = GROWTH_WIN_RATIO_LATE_END_LEVEL - GROWTH_WIN_RATIO_LATE_START_LEVEL;
+    var t = Math.min(growthLevel - GROWTH_WIN_RATIO_LATE_START_LEVEL, span) / span;
+    return GROWTH_WIN_RATIO_LATE_START + t * (GROWTH_WIN_RATIO_LATE_END - GROWTH_WIN_RATIO_LATE_START);
   }
 
   function buildGrowthTiles(size, winRatio, startId) {
