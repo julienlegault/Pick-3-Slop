@@ -809,7 +809,7 @@
 
       renderBoonList();
 
-      var totalPairs = Math.round(boonIds.length * (boonIds.length - 1) / 2);
+      var totalPairs = boonIds.length * (boonIds.length - 1) / 2;
       statusEl.textContent =
         'Permutations done. Best sampled avg spins: ' + bestAvgSpins.toFixed(2) +
         ' \u00b7 Borda ordering applied (' + boonIds.length + ' nodes, ' +
@@ -823,6 +823,9 @@
       var numPerms = parseInt(permCountInput.value, 10);
       var maxSpinsPerRun = parseInt(maxSpinsInput.value, 10);
       var maxDeadZoneRetries = parseInt(deadZoneRetriesInput.value, 10);
+      // Use at least 20 runs per permutation for a stable mean; divide the
+      // configured run count by 8 so total simulation work stays comparable
+      // to a normal single-ordering run (500 perms × runs/8 ≈ 62.5× runs).
       var runsPerPerm = Math.max(20, Math.floor(parseInt(runsInput.value, 10) / 8));
       if (!Number.isFinite(numPerms) || numPerms < 1) {
         statusEl.textContent = 'Enter a valid number of permutations.';
