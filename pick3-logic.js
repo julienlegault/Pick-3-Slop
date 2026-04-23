@@ -12,7 +12,6 @@
   var FLAT_BONUS_STACK_TO_COUNT = 100;
   var FLAT_BONUS_STACK_TO_SIZE = 2;
   var MIN_STACKABLE_COUNT = 1;
-  var MIN_DEAD_ZONE_SIZE = 0.1;
   var MIN_ANCHOR_SCALE = 0.08;
   // Tolerance for float comparisons when checking if a clamped scale reached its minimum.
   var ANCHOR_SCALE_EPSILON = 1e-9;
@@ -338,19 +337,6 @@
     function(_, v) { return 'After each wheel growth, add ' + v.amount + ' extra win tile(s).'; }
   ));
 
-  addMany(numericBoon(
-    'dead_zone',
-    'Null Wedge',
-    'dead_zone',
-    { uncommon: 4, rare: 3, legendary: 2 },
-    { size: {
-      uncommon: { min: 0.45, max: 0.60, step: 0.01 },
-      rare: { min: 0.65, max: 0.85, step: 0.01 },
-      legendary: { min: 0.95, max: 1.20, step: 0.01 },
-    }},
-    function(_, v) { return 'Adds a dead-zone tile (size ' + v.size.toFixed(2) + ') that automatically re-spins.'; }
-  ));
-
   BOONS.push(boonTemplate({
     id: 'sacrifice_instead',
     group: 'sacrifice_instead',
@@ -459,7 +445,6 @@
     var fb = boon.flatBonus || 0;
     if (typeof val !== 'number') return val;
     if (key === 'charges' || key === 'amount') return Math.max(MIN_STACKABLE_COUNT, Math.round(val + fb * FLAT_BONUS_STACK_TO_COUNT));
-    if (key === 'size') return Math.max(MIN_DEAD_ZONE_SIZE, val + fb * FLAT_BONUS_STACK_TO_SIZE);
     var capKey = key + 'Cap';
     var cap = (boon[capKey] !== undefined) ? boon[capKey] : 0.99;
     return clamp(val + fb, 0, cap);
@@ -796,7 +781,7 @@
   }
 
   function buildLayout(tiles, boons, addTemp) {
-    var wm = 1, lm = 1, tmp = 0, dead = 0;
+    var wm = 1, lm = 1, tmp = 0;
     for (var i = 0; i < boons.length; i++) {
       var b = boons[i];
       if (b.effect === 'tide_shift') {
@@ -804,7 +789,6 @@
         lm *= Math.max(MIN_LOSE_TILE_MULT, 1 - boonNumeric(b, 'loseShrink'));
       }
       if (b.effect === 'temp_win' && addTemp) tmp += boonNumeric(b, 'amount');
-      if (b.effect === 'dead_zone' && addTemp) dead += boonNumeric(b, 'size');
     }
 
     var result = tiles.map(function(t) {
@@ -815,7 +799,6 @@
     });
 
     for (var j = 0; j < tmp; j++) result.push({ id: '_t' + j, type: 'win', sz: wm, temp: true });
-    if (dead > 0) result.push({ id: '_dead', type: 'dead', sz: dead, temp: true });
     return result;
   }
   function calcAngles(layout) {
