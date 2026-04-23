@@ -1110,5 +1110,6 @@
     enforceMinimumLoseAreaAfterSpin: enforceMinimumLoseAreaAfterSpin,
     applyBoon: applyBoon,
     getStackedDesc: getStackedDesc,
+    instantiateTemplate: instantiateTemplate,
   };
 })(window);
