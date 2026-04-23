@@ -505,6 +505,7 @@
         } else {
           setPhase('idle');
         }
+        if (!NO_TRACK && boon.rarity === 'legendary') { fetch('https://api.counterapi.dev/v2/pick3slop/legendary-boons/up').catch(function() {}); }
         setNonCommonPickStreak(function(streak) {
           return boon.rarity === 'common' ? 0 : (streak + 1);
         });
