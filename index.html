@@ -31,22 +31,15 @@
       60% { transform: translateX(-2px) rotate(-1deg); }
       80% { transform: translateX(2px) rotate(1deg); }
     }
-    @keyframes edgeOvertake {
-      0% {
-        opacity: 0;
-        stroke-width: 16;
-        filter: blur(2px);
-      }
-      45% {
-        opacity: .95;
-        stroke-width: 9;
-        filter: blur(1px);
-      }
-      100% {
-        opacity: 1;
-        stroke-width: 1.5;
-        filter: blur(0);
-      }
+    @keyframes loseFlipToWin {
+      0% { transform: scale(1) rotateY(0deg); opacity: 1; }
+      50% { transform: scale(1.07) rotateY(90deg); opacity: .7; }
+      100% { transform: scale(1) rotateY(180deg); opacity: 1; }
+    }
+    @keyframes revealRescueFlip {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.08); }
+      100% { transform: scale(1); }
     }
     @keyframes rescueTextFade {
       from { opacity: 0; }
@@ -376,8 +369,13 @@
         if (res.flippedIds && res.flippedIds.length > 0) {
           setTimeout(function() { setFlippedTiles([]); }, 560);
         }
-        if (res.grew) setGl(function(g) { return g + 1; });
-        setPhase('idle');
+        if (res.grew) {
+          setGl(function(g) { return g + 1; });
+          setPhase('growing');
+          t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
+        } else {
+          setPhase('idle');
+        }
         setNonCommonPickStreak(function(streak) {
           return boon.rarity === 'common' ? 0 : (streak + 1);
         });
@@ -473,25 +471,6 @@
       var wins = tiles.filter(function(t) { return t.type === 'win'; }).length;
       var isOverlay = phase === 'boon_select' || phase === 'game_over';
       var renderWheelTile = function(t, i) {
-        if (flippedMap[t.id] && t.type === 'win') {
-          return (
-            <g key={t.id}>
-              <path
-                d={slicePath(da[i].start, da[i].end)}
-                fill="#1e1e1e"
-                stroke="#0f0f0f"
-                strokeWidth={1.5}
-              />
-              <path
-                d={slicePath(da[i].start, da[i].end)}
-                fill="#d4d4d4"
-                stroke="#0f0f0f"
-                strokeWidth={1.5}
-                style={{ animation: 'edgeOvertake .55s ease both' }}
-              />
-            </g>
-          );
-        }
         return (
           <path
             key={t.id}
@@ -499,6 +478,11 @@
             fill={t.type === 'dead' ? '#3a2f45' : (t.type === 'win' ? '#d4d4d4' : '#1e1e1e')}
             stroke="#0f0f0f"
             strokeWidth={1.5}
+            style={flippedMap[t.id] ? {
+              animation: 'loseFlipToWin .55s ease',
+              transformBox: 'fill-box',
+              transformOrigin: 'center',
+            } : null}
           />
         );
       };
@@ -633,31 +617,22 @@
                 transformStyle: 'preserve-3d',
               }}>
                 <svg width={310} height={260} overflow="visible">
-                  <g>
-                  {(rtile.baseType === 'lose' && rtile.type === 'win') ? (
-                    <>
-                      <path
-                        d={revealWedge(rtile.halfSpan)}
-                        fill="#242424"
-                        stroke="#555"
-                        strokeWidth={2}
-                      />
-                      <path
-                        d={revealWedge(rtile.halfSpan)}
-                        fill="#d4d4d4"
-                        stroke="#888"
-                        strokeWidth={2}
-                        style={{ animation: 'edgeOvertake .45s ease both' }}
-                      />
-                    </>
-                  ) : (
-                    <path
-                      d={revealWedge(rtile.halfSpan)}
-                      fill={rtile.type === 'win' ? '#d4d4d4' : '#242424'}
-                      stroke={rtile.type === 'win' ? '#888' : '#555'}
-                      strokeWidth={2}
-                    />
-                  )}
+                  <g style={rtile.baseType === 'lose' && rtile.type === 'win' ? {
+                    animation: 'revealRescueFlip .45s ease',
+                    transformBox: 'fill-box',
+                    transformOrigin: 'center',
+                  } : null}>
+                  <path
+                    d={revealWedge(rtile.halfSpan)}
+                    fill={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#242424' : (rtile.type === 'win' ? '#d4d4d4' : '#242424')}
+                    stroke={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#555' : (rtile.type === 'win' ? '#888' : '#555')}
+                    strokeWidth={2}
+                    style={rtile.baseType === 'lose' && rtile.type === 'win' ? {
+                      animation: 'loseFlipToWin .45s ease',
+                      transformBox: 'fill-box',
+                      transformOrigin: 'center',
+                    } : null}
+                  />
                   <text
                     x={160} y={132}
                     textAnchor="middle" dominantBaseline="middle"
