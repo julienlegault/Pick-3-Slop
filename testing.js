@@ -45,6 +45,10 @@
     }, {});
     // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
     var FRAME_TIME_BUDGET_MILLISECONDS = 25;
+    // Safety cap: tiles triple on each wheel growth; beyond this count the run is degenerate
+    // and further growth would consume too much memory. 6 * 3^7 = 13122, so this allows
+    // up to ~7 growth events (well above normal gameplay) before the run is stopped.
+    var MAX_SIMULATION_TILE_COUNT = 13122;
     var METRIC_LABELS = {
       spins: 'number of spins',
       nonCommonBoons: 'number of non-common boons',
@@ -255,6 +259,8 @@
       var cap = options.maxSpinsPerRun;
 
       while (cap-- > 0) {
+        // Safety: exponential wheel growth can make tiles huge; treat the run as capped.
+        if (tiles.length > MAX_SIMULATION_TILE_COUNT) break;
         sc += 1;
         var nChoices = 3 + boons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
         var prep = prepareSpin(tiles, boons);
@@ -436,6 +442,8 @@
       var done = 0;
       var prioMap = getCurrentPriority();
       runBtn.disabled = true;
+      permBtn.disabled = true;
+      spinner.classList.add('active');
       statusEl.textContent = 'Running 0 / ' + totalRuns + '...';
       runLogEl.innerHTML = '';
       setDebugVisibility(options.showDebug);
@@ -461,6 +469,8 @@
             ' | Avg spins: ' + avgSpins.toFixed(2) +
             ' | Avg boon selectability: ' + avgBoon.toFixed(2);
           runBtn.disabled = false;
+          permBtn.disabled = false;
+          spinner.classList.remove('active');
         }
       }
       requestAnimationFrame(step);
