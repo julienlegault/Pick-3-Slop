@@ -12,6 +12,7 @@
     var prepareSpin = window.Pick3Logic.prepareSpin;
     var buildLayout = window.Pick3Logic.buildLayout;
     var pickWeighted = window.Pick3Logic.pickWeighted;
+    var tryDoom = window.Pick3Logic.tryDoom;
     var drawBoons = window.Pick3Logic.drawBoons;
     var tryRescue = window.Pick3Logic.tryRescue;
     var enforceMinimumLoseAreaAfterSpin = window.Pick3Logic.enforceMinimumLoseAreaAfterSpin;
@@ -261,10 +262,20 @@
         tiles = prep.tiles;
         boons = prep.boons;
         var layout = buildLayout(tiles, boons, true);
-        var idx = pickWeighted(layout);
+        var doomed = tryDoom(gl);
+        var idx;
+        if (doomed) {
+          idx = -1;
+          for (var di = 0; di < layout.length; di++) {
+            if (layout[di].type === 'lose') { idx = di; break; }
+          }
+          if (idx < 0) { doomed = false; idx = pickWeighted(layout); }
+        } else {
+          idx = pickWeighted(layout);
+        }
         var result = layout[idx].type;
 
-        if (result === 'lose') {
+        if (result === 'lose' && !doomed) {
           var res = tryRescue(boons);
           result = res.ok ? 'win' : 'lose';
           boons = res.boons;
