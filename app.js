@@ -211,7 +211,8 @@
         setPhase('reveal');
         setSc(function(n) { return n + 1; });
         revDone.current = false;
-        t2.current = setTimeout(advance, 720);
+        var isRescued = d.baseType === 'lose' && d.result === 'win';
+        t2.current = setTimeout(advance, isRescued ? 2500 : 720);
       }, [advance]);
 
       var finish = useCallback(function() {
@@ -321,7 +322,7 @@
       useEffect(function() {
         if (phase !== 'reveal' || !rtile) return;
         if (rtile.baseType === 'lose' && rtile.type === 'win') {
-          var tid = setTimeout(function() { setRevealFlip(true); }, 140);
+          var tid = setTimeout(function() { setRevealFlip(true); }, 800);
           return function() { clearTimeout(tid); };
         }
       }, [phase, rtile]);
@@ -755,13 +756,15 @@
                         stroke="#555"
                         strokeWidth={2}
                       />
-                      <path
-                        d={revealWedge(rtile.halfSpan)}
-                        fill="#d4d4d4"
-                        stroke="#888"
-                        strokeWidth={2}
-                        style={{ animation: 'edgeOvertake .45s ease both' }}
-                      />
+                      {revealFlip && (
+                        <path
+                          d={revealWedge(rtile.halfSpan)}
+                          fill="#D4AF37"
+                          stroke="#b8962a"
+                          strokeWidth={2}
+                          style={{ animation: 'edgeOvertake .45s ease both' }}
+                        />
+                      )}
                     </>
                   ) : (
                     <path
@@ -776,10 +779,10 @@
                     textAnchor="middle" dominantBaseline="middle"
                     fontFamily="'Cinzel', serif" fontWeight="700"
                     fontSize={20} letterSpacing="3"
-                    fill={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#d0d0d0' : (rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0')}
-                    style={(rtile.baseType === 'lose' && rtile.type === 'win' && revealFlip) ? { animation: 'rescueTextFade .2s ease' } : null}
+                    fill={(rtile.baseType === 'lose' && rtile.type === 'win') ? (revealFlip ? '#1a1a1a' : '#d0d0d0') : (rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0')}
+                    style={(rtile.baseType === 'lose' && rtile.type === 'win' && revealFlip) ? { animation: 'rescueTextFade .3s ease' } : null}
                   >
-                    {(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? 'x LOSE x' : (rtile.type === 'win' ? '* WIN *' : 'x LOSE x')}
+                    {(rtile.baseType === 'lose' && rtile.type === 'win') ? (revealFlip ? 'SAVED!' : 'x LOSE x') : (rtile.type === 'win' ? '* WIN *' : 'x LOSE x')}
                   </text>
                   </g>
                 </svg>
