@@ -1,6 +1,8 @@
     const { useState, useRef, useCallback, useEffect } = React;
       const {
         CX, CY, R, LAND, BOONS, RC, INIT_TILES,
+        PROB_DISPLAY_THRESHOLD, FULL_PROB_THRESHOLD,
+        isVirtWheel, virtGetCount, virtTotalCount,
         slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
         pickWeighted, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
         getStackedDesc, instantiateTemplate,
@@ -518,7 +520,19 @@
 
       var dl   = buildLayout(tiles, boons, false);
       var da   = calcAngles(dl);
-      var wins = tiles.filter(function(t) { return t.type === 'win'; }).length;
+      var isVirt = isVirtWheel(tiles);
+      var wins = isVirt ? virtGetCount(tiles, 'win') : tiles.filter(function(t) { return t.type === 'win'; }).length;
+      var totalTileCount = isVirt ? virtTotalCount(tiles) : tiles.length;
+
+      // Pre-compute win fraction for the probabilistic two-sector display (gl >= PROB_DISPLAY_THRESHOLD).
+      var probWinFrac = (function() {
+        if (gl < PROB_DISPLAY_THRESHOLD) return null;
+        var totalSz = dl.reduce(function(s, t) { return s + t.sz; }, 0);
+        if (totalSz <= 0) return 0.5;
+        var winSz = dl.reduce(function(s, t) { return s + (t.type === 'win' ? t.sz : 0); }, 0);
+        return winSz / totalSz;
+      })();
+
       var isOverlay = phase === 'boon_select' || phase === 'game_over';
       var totalBoons = BOONS.length;
       var seenBoons  = BOONS.filter(function(b) { return collection.has(b.id); }).length;
@@ -540,10 +554,14 @@
         if (n >= SCIENTIFIC_NOTATION_THRESHOLD) return n.toExponential(2);
         return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
       }
+      function formatWinPct(frac) {
+        return (Math.round(frac * 1000) / 10) + '% WIN';
+      }
 
       // Build render groups: consecutive same-type tiles are merged when at least one
       // of the neighbouring tiles is "tiny" (outer arc < 3 screen-px).
-      var renderGroups = (function() {
+      // Skipped entirely when gl >= PROB_DISPLAY_THRESHOLD (two-sector rendering is used instead).
+      var renderGroups = probWinFrac !== null ? [] : (function() {
         var n = dl.length;
         if (n === 0) return [];
         var tiny = dl.map(function(t, i) { return (da[i].end - da[i].start) < MERGE_THRESHOLD_DEG; });
@@ -599,7 +617,11 @@
             <div className="app-header">
               <h1 className="app-title">PICK 3 SLOP</h1>
               <div className="app-subtitle">
-                SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
+                SPIN {sc} &nbsp;|&nbsp;
+                  {probWinFrac !== null
+                    ? formatWinPct(probWinFrac)
+                    : wins + ' / ' + totalTileCount + ' WIN'
+                  } &nbsp;|&nbsp; LVL {gl}
               </div>
             </div>
 
@@ -620,7 +642,19 @@
                 transition: anim ? 'transform 3.4s cubic-bezier(0.14, 0.58, 0.08, 1.0)' : 'none',
               }}>
                 <circle cx={CX} cy={CY} r={R + 5} fill="none" stroke="#2a2a2a" strokeWidth={2} />
-                {renderGroups.map(function(group, gi) {
+                {probWinFrac !== null ? (
+                  /* Probabilistic two-sector wheel (gl >= PROB_DISPLAY_THRESHOLD) */
+                  (function() {
+                    var winDeg  = probWinFrac * 360;
+                    var loseDeg = 360 - winDeg;
+                    return (
+                      <>
+                        {winDeg  > 0.01 && <path d={slicePath(0, winDeg)}         fill="#d4d4d4" stroke="#0f0f0f" strokeWidth={1.5} />}
+                        {loseDeg > 0.01 && <path d={slicePath(winDeg, 360)}        fill="#1e1e1e" stroke="#0f0f0f" strokeWidth={1.5} />}
+                      </>
+                    );
+                  })()
+                ) : renderGroups.map(function(group, gi) {
                   // Any tile in this group undergoing the flip animation? → render individually.
                   var hasFlipped = group.items.some(function(idx) { return flippedMap[dl[idx].id] && dl[idx].type === 'win'; });
                   if (hasFlipped) {
@@ -649,7 +683,7 @@
               {/* Tile counter — static overlay (does not rotate with wheel), shown after 3rd growth */}
               {gl >= 3 && (
                 <div className="tile-counter">
-                  {formatTileCount(tiles.length)}
+                  {formatTileCount(totalTileCount)}
                 </div>
               )}
             </div>

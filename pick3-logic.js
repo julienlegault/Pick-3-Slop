@@ -32,6 +32,11 @@
   var GROWTH_WIN_RATIO_LATE_END = 0.05;        // win ratio at late-end level (95% loss)
   var MIN_POST_SPIN_LOSE_AREA_RATIO = 0.005;
   var MAX_PERCENTAGE = 0.99;
+  // At gl >= PROB_DISPLAY_THRESHOLD the wheel is rendered as two probability sectors.
+  var PROB_DISPLAY_THRESHOLD = 4;
+  // At gl >= FULL_PROB_THRESHOLD the internal tile array is replaced by two virtual tiles,
+  // trading per-tile bookkeeping for a compact win/lose count pair.
+  var FULL_PROB_THRESHOLD = 6;
 
   function rarityMult(rarity, gl) {
     var arr = RARITY_SCALE[rarity] || [1];
@@ -43,6 +48,32 @@
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
   function pct(v) { return Math.round(v * 100); }
   function makeIid(id) { return id + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+
+  // ── Virtual-tile helpers ─────────────────────────────────────────────────
+  // At FULL_PROB_THRESHOLD the tile array collapses to exactly two entries
+  // (one win, one lose), each carrying a _count representing how many
+  // real tiles that sector stands for.  All functions check isVirtWheel()
+  // before touching individual-tile properties.
+  function isVirtWheel(tiles) {
+    return tiles.length > 0 && tiles[0]._virt === true;
+  }
+  function virtGetCount(tiles, type) {
+    for (var i = 0; i < tiles.length; i++) {
+      if (tiles[i].type === type) return tiles[i]._count || 0;
+    }
+    return 0;
+  }
+  function virtTotalCount(tiles) {
+    var s = 0;
+    for (var i = 0; i < tiles.length; i++) s += (tiles[i]._count || 0);
+    return s;
+  }
+  function makeVirtWheel(winCount, loseCount) {
+    return [
+      { id: -1, type: 'win',  _virt: true, _count: Math.max(0, Math.round(winCount))  },
+      { id: -2, type: 'lose', _virt: true, _count: Math.max(1, Math.round(loseCount)) },
+    ];
+  }
 
   function rarityRange(rarity, map) {
     return map[rarity] || map.rare;
@@ -731,6 +762,25 @@
       if (b.effect === 'anchor_lose') anchorShrink += boonNumeric(b, 'shrinkPerSpin');
     });
 
+    if (isVirtWheel(t2)) {
+      // Virtual mode: approximate adjacency fraction for win_merge rather than
+      // iterating individual tiles.  For a uniformly-interleaved distribution
+      // each win tile has a win neighbour with probability ≈ min(1, 2·winRatio).
+      if (mergeGrow > 0) {
+        var totC = virtTotalCount(t2);
+        var winC = virtGetCount(t2, 'win');
+        var winRatio = totC > 0 ? winC / totC : 0;
+        var adjFrac = Math.min(1, 2 * winRatio);
+        for (var vi = 0; vi < t2.length; vi++) {
+          if (t2[vi].type === 'win') {
+            t2[vi].mergeBonus = (t2[vi].mergeBonus || 0) + mergeGrow * adjFrac;
+          }
+        }
+      }
+      // anchor_lose: individual anchored tiles don't exist in virtual mode; skip.
+      return { tiles: t2, boons: b2 };
+    }
+
     if (mergeGrow > 0) {
       var n = t2.length;
       for (var i = 0; i < n; i++) {
@@ -790,6 +840,19 @@
         lm *= Math.max(MIN_LOSE_TILE_MULT, 1 - boonNumeric(b, 'loseShrink'));
       }
       if (b.effect === 'temp_win' && addTemp) tmp += boonNumeric(b, 'amount');
+    }
+
+    if (isVirtWheel(tiles)) {
+      var winC = virtGetCount(tiles, 'win');
+      var loseC = virtGetCount(tiles, 'lose');
+      var winTile = tiles.find(function(t) { return t.type === 'win'; });
+      var mergeMult = winTile ? (1 + (winTile.mergeBonus || 0)) : 1;
+      var result = [
+        Object.assign({}, winTile,  { sz: Math.max(0.02, winC  * wm * mergeMult) }),
+        Object.assign({}, tiles.find(function(t) { return t.type === 'lose'; }), { sz: Math.max(0.02, loseC * lm) }),
+      ];
+      if (tmp > 0) result.push({ id: '_vt0', type: 'win', _virt: true, _count: tmp, sz: Math.max(0.02, tmp * wm), temp: true });
+      return result;
     }
 
     var result = tiles.map(function(t) {
@@ -928,6 +991,14 @@
   }
 
   function convertLoseToWin(t2, amount) {
+    if (isVirtWheel(t2)) {
+      // Adjust virtual counts; return no individual IDs (no flip animation in virtual mode).
+      for (var v = 0; v < t2.length; v++) {
+        if (t2[v].type === 'win')  t2[v] = Object.assign({}, t2[v], { _count: t2[v]._count + amount });
+        if (t2[v].type === 'lose') t2[v] = Object.assign({}, t2[v], { _count: Math.max(1, t2[v]._count - amount) });
+      }
+      return [];
+    }
     var flipped = [];
     for (var i = 0; i < amount; i++) {
       var li = -1;
@@ -1014,20 +1085,31 @@
   }
 
   function growWheel(tiles, boons, startId) {
-    var n = tiles.length;
+    var n = isVirtWheel(tiles) ? virtTotalCount(tiles) : tiles.length;
     var priorGrowthLevel = inferGrowthLevelFromTileCount(n);
     var ratio = growthWinRatio(priorGrowthLevel);
-    var grown = buildGrowthTiles(n * WHEEL_GROWTH_MULTIPLIER, ratio, startId);
-    var t2 = grown.tiles;
-    var id = grown.nextId;
-    var flippedIds = [];
-
+    var newTotal = n * WHEEL_GROWTH_MULTIPLIER;
+    var b2 = boons.filter(function(b) { return b.effect !== 'tide_shift'; });
     var bonusWins = 0;
     boons.forEach(function(b) { if (b.effect === 'growth_bonus_win') bonusWins += boonNumeric(b, 'amount'); });
-    if (bonusWins > 0) {
-      flippedIds = flippedIds.concat(convertLoseToWin(t2, bonusWins));
+    var flippedIds = [];
+    var t2, id;
+
+    if (isVirtWheel(tiles) || priorGrowthLevel + 1 >= FULL_PROB_THRESHOLD) {
+      // Compress (or stay) in virtual-tile mode.
+      var rawWin  = Math.max(1, Math.round(newTotal * ratio)) + bonusWins;
+      var rawLose = Math.max(1, newTotal - Math.round(newTotal * ratio));
+      t2 = makeVirtWheel(rawWin, rawLose);
+      id = startId; // no individual tile IDs needed
+    } else {
+      var grown = buildGrowthTiles(newTotal, ratio, startId);
+      t2 = grown.tiles;
+      id = grown.nextId;
+      if (bonusWins > 0) {
+        flippedIds = flippedIds.concat(convertLoseToWin(t2, bonusWins));
+      }
     }
-    var b2 = boons.filter(function(b) { return b.effect !== 'tide_shift'; });
+
     return { tiles: t2, boons: b2, nextId: id, flippedIds: flippedIds };
   }
 
@@ -1066,12 +1148,15 @@
     }
 
     if (picked.effect === 'anchor_lose') {
-      var loseIdx = [];
-      for (var a = 0; a < t2.length; a++) if (t2[a].type === 'lose' && !t2[a].anchored) loseIdx.push(a);
-      if (loseIdx.length > 0) {
-        var li = pick(loseIdx);
-        t2[li] = Object.assign({}, t2[li], { anchored: true, anchorScale: 1 });
+      if (!isVirtWheel(t2)) {
+        var loseIdx = [];
+        for (var a = 0; a < t2.length; a++) if (t2[a].type === 'lose' && !t2[a].anchored) loseIdx.push(a);
+        if (loseIdx.length > 0) {
+          var li = pick(loseIdx);
+          t2[li] = Object.assign({}, t2[li], { anchored: true, anchorScale: 1 });
+        }
       }
+      // Virtual mode: boon is kept for probability-level effects; individual anchor skipped.
     }
 
     if (picked.effect === 'duplicate_right') {
@@ -1109,7 +1194,12 @@
       flippedIds = flippedIds.concat(convertLoseToWin(t2, pendingAddWins));
     }
 
-    var grew = t2.every(function(t) { return t.type === 'win'; });
+    var grew;
+    if (isVirtWheel(t2)) {
+      grew = virtGetCount(t2, 'lose') <= 0;
+    } else {
+      grew = t2.every(function(t) { return t.type === 'win'; });
+    }
     if (grew) {
       var growth = growWheel(t2, b2, id);
       t2 = growth.tiles;
@@ -1135,6 +1225,11 @@
     TOTAL_W: TOTAL_W,
     RC: RC,
     INIT_TILES: INIT_TILES,
+    PROB_DISPLAY_THRESHOLD: PROB_DISPLAY_THRESHOLD,
+    FULL_PROB_THRESHOLD: FULL_PROB_THRESHOLD,
+    isVirtWheel: isVirtWheel,
+    virtGetCount: virtGetCount,
+    virtTotalCount: virtTotalCount,
     rarityMult: rarityMult,
     polar: polar,
     slicePath: slicePath,
