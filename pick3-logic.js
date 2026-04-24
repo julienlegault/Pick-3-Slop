@@ -840,6 +840,12 @@
     if (!preHasGuarantee) {
       var preIndFail = 1.0, preAddFail = 1.0, preMulFail = 1.0, preFragFail = 1.0;
       var preAddP = 0, preAddCap = 0.95, preFailMul = 1.0;
+      // Each rescue type uses sequential independent random checks, so the combined failure
+      // probability is the product of every individual check's failure probability.
+      // Additive: after each boon the check uses the running cumulative addP (not just the
+      //   marginal addition), so preAddFail = ∏(1 - clamp(addP_k, 0, addCap)).
+      // Multiplicative: each boon checks against the running combined win probability, so
+      //   preMulFail = ∏(1 - clamp(1 - failMul_k, 0, 0.995)).
       nb.forEach(function(b) {
         if (b.effect === 'rescue_independent') preIndFail *= (1 - boonNumeric(b, 'chance'));
         if (b.effect === 'rescue_additive') {
@@ -856,6 +862,8 @@
       var combinedFail = preIndFail * preAddFail * preMulFail * preFragFail;
       if (combinedFail < 0.01) {
         // Win probability would exceed 99%; apply a forced-loss pre-roll to cap it.
+        // Solving P(forced loss) × 1 + P(not forced) × combinedFail = 0.01 gives:
+        //   forceFail = (0.01 - combinedFail) / (1 - combinedFail)
         var forceFail = (0.01 - combinedFail) / (1 - combinedFail);
         if (Math.random() < forceFail) {
           return { ok: false, boons: nb, triggered: [], winBy: null };
