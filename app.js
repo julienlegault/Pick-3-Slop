@@ -683,10 +683,7 @@
               {/* Tile counter — static overlay (does not rotate with wheel), shown after 3rd growth */}
               {gl >= 3 && (
                 <div className="tile-counter">
-                  {probWinFrac !== null
-                    ? formatWinPct(probWinFrac)
-                    : formatTileCount(totalTileCount)
-                  }
+                  {formatTileCount(totalTileCount)}
                 </div>
               )}
             </div>
