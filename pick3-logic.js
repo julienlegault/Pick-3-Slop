@@ -22,13 +22,13 @@
   var COMMON_CATCHUP_PER_EXTRA_NON_COMMON = 0.45;
   var COMMON_CATCHUP_MAX_MULT = 3.0;
   // Wheel-growth difficulty curve: grows progressively harder each time.
-  // Loss ratios: 1/3, 4/9, 1/2, 2/3, 3/4, …, 95% at the 10th growth.
+  // Loss ratios: 1/3, 4/9, 1/2, 2/3, 4/5, …, 95% at the 10th growth.
   var WHEEL_GROWTH_MULTIPLIER = 3;
   // Win ratios indexed by growthLevel (0 = first growth, 1 = second, …)
-  var GROWTH_WIN_RATIOS = [2/3, 5/9, 1/2, 1/3, 1/4];
+  var GROWTH_WIN_RATIOS = [2/3, 5/9, 1/2, 1/3, 1/5];
   var GROWTH_WIN_RATIO_LATE_START_LEVEL = 4;   // growthLevel where late curve begins
   var GROWTH_WIN_RATIO_LATE_END_LEVEL = 9;     // growthLevel of the 10th growth
-  var GROWTH_WIN_RATIO_LATE_START = 0.25;      // win ratio at late-start level
+  var GROWTH_WIN_RATIO_LATE_START = 0.20;      // win ratio at late-start level
   var GROWTH_WIN_RATIO_LATE_END = 0.05;        // win ratio at late-end level (95% loss)
   var MIN_POST_SPIN_LOSE_AREA_RATIO = 0.005;
   var MAX_PERCENTAGE = 0.99;
@@ -831,6 +831,37 @@
     var addP = 0, addCap = 0;
     var failMul = 1;
     var hasMul = false;
+
+    // Pre-compute combined rescue fail probability to enforce a ≤99% win cap.
+    // Shield and sacrifice always guarantee a win, so skip the cap check for those.
+    var preHasGuarantee = nb.some(function(b) {
+      return (b.effect === 'shield' && (b.charges || 0) > 0) || b.effect === 'sacrifice_instead';
+    });
+    if (!preHasGuarantee) {
+      var preIndFail = 1.0, preAddFail = 1.0, preMulFail = 1.0, preFragFail = 1.0;
+      var preAddP = 0, preAddCap = 0.95, preFailMul = 1.0;
+      nb.forEach(function(b) {
+        if (b.effect === 'rescue_independent') preIndFail *= (1 - boonNumeric(b, 'chance'));
+        if (b.effect === 'rescue_additive') {
+          preAddP += boonNumeric(b, 'chance');
+          preAddCap = Math.max(preAddCap, boonNumeric(b, 'cap'));
+          preAddFail *= (1 - clamp(preAddP, 0, preAddCap));
+        }
+        if (b.effect === 'rescue_multiplicative') {
+          preFailMul *= (1 - boonNumeric(b, 'chance'));
+          preMulFail *= (1 - clamp(1 - preFailMul, 0, 0.995));
+        }
+        if (b.effect === 'rescue_fragile') preFragFail *= (1 - boonNumeric(b, 'chance'));
+      });
+      var combinedFail = preIndFail * preAddFail * preMulFail * preFragFail;
+      if (combinedFail < 0.01) {
+        // Win probability would exceed 99%; apply a forced-loss pre-roll to cap it.
+        var forceFail = (0.01 - combinedFail) / (1 - combinedFail);
+        if (Math.random() < forceFail) {
+          return { ok: false, boons: nb, triggered: [], winBy: null };
+        }
+      }
+    }
 
     for (var i = 0; i < nb.length; i++) {
       var b = nb[i];
