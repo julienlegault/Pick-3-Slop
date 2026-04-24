@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { min-height: 100vh; background: #0f0f0f; }
+#root { min-height: 100vh; }
+
+@keyframes fu        { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes zr        { 0%{transform:scale(.15);opacity:0;} 65%{transform:scale(1.07);opacity:1;} 100%{transform:scale(1);opacity:1;} }
+@keyframes blink     { 0%,100%{opacity:.5;} 50%{opacity:1;} }
+@keyframes overlayIn { from{opacity:0;} to{opacity:1;} }
+@keyframes growPulse { 0%,100%{box-shadow:0 0 18px rgba(212,175,55,.22);} 50%{box-shadow:0 0 52px rgba(212,175,55,.72),0 0 90px rgba(212,175,55,.2);} }
+@keyframes tileReveal {
+  0%   { transform: translateX(95px) scale(.26); opacity: 0; }
+  62%  { transform: translateX(-5px) scale(1.05); opacity: 1; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes boonShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-2px) rotate(-1deg); }
+  40% { transform: translateX(2px) rotate(1deg); }
+  60% { transform: translateX(-2px) rotate(-1deg); }
+  80% { transform: translateX(2px) rotate(1deg); }
+}
+@keyframes edgeOvertake {
+  0% {
+    opacity: 0;
+    stroke-width: 16;
+    filter: blur(2px);
+  }
+  45% {
+    opacity: .95;
+    stroke-width: 9;
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    stroke-width: 1.5;
+    filter: blur(0);
+  }
+}
+@keyframes rescueTextFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.spin-btn:hover   { background: rgba(212,175,55,.1) !important; box-shadow: 0 0 26px rgba(212,175,55,.3) !important; }
+.again-btn:hover  { background: rgba(212,175,55,.1) !important; }
+.boon-card        { transition: transform .15s, box-shadow .15s !important; }
+.boon-card:hover  { transform: translateY(-4px) !important; }
+.boon-tag         { position: relative; display: inline-block; touch-action: none; }
+.boon-tag.shaking { animation: boonShake .22s ease-in-out 2; }
+.boon-tip         {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 190px;
+  padding: 10px 13px;
+  border-radius: 4px;
+  background: #1a1a1a;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 4px 24px rgba(0,0,0,.8);
+}
+.boon-tag:hover .boon-tip,
+.boon-tag.pinned .boon-tip { display: block; }
+.tip-arrow {
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+}

@@ -1,0 +1,687 @@
+    var BASE_BOONS = window.Pick3Logic.BOONS;
+    // Higher number means rarer boon so default priority starts from the rarest at the top.
+    var RARITY_RANK = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
+    var orderedBoons = BASE_BOONS.slice().sort(function(a, b) {
+      var rarityDiff = (RARITY_RANK[b.rarity] || 0) - (RARITY_RANK[a.rarity] || 0);
+      if (rarityDiff !== 0) return rarityDiff;
+      var weightDiff = (a.w || 0) - (b.w || 0);
+      if (weightDiff !== 0) return weightDiff;
+      return a.name.localeCompare(b.name);
+    });
+    var INIT_TILES = window.Pick3Logic.INIT_TILES;
+    var prepareSpin = window.Pick3Logic.prepareSpin;
+    var buildLayout = window.Pick3Logic.buildLayout;
+    var pickWeighted = window.Pick3Logic.pickWeighted;
+    var drawBoons = window.Pick3Logic.drawBoons;
+    var tryRescue = window.Pick3Logic.tryRescue;
+    var enforceMinimumLoseAreaAfterSpin = window.Pick3Logic.enforceMinimumLoseAreaAfterSpin;
+    var applyBoon = window.Pick3Logic.applyBoon;
+    var RC = window.Pick3Logic.RC;
+
+    var boonList = document.getElementById('boonList');
+    var runsInput = document.getElementById('runsInput');
+    var maxSpinsInput = document.getElementById('maxSpinsInput');
+    var xMetricSelect = document.getElementById('xMetricSelect');
+    var yMetricSelect = document.getElementById('yMetricSelect');
+    var colorMetricSelect = document.getElementById('colorMetricSelect');
+    var showDebugInput = document.getElementById('showDebugInput');
+    var plotDescriptionEl = document.getElementById('plotDescription');
+    var runBtn = document.getElementById('runBtn');
+    var permBtn = document.getElementById('permBtn');
+    var permCountInput = document.getElementById('permCountInput');
+    var spinner = document.getElementById('spinner');
+    var statusEl = document.getElementById('status');
+    var runDebugSubEl = document.getElementById('runDebugSub');
+    var runLogEl = document.getElementById('runLog');
+    var canvas = document.getElementById('plot');
+    var ctx = canvas.getContext('2d');
+
+    var dragItem = null;
+    var results = [];
+    var boonRatings = {};
+    var boonById = BASE_BOONS.reduce(function(map, boon) {
+      map[boon.id] = boon;
+      return map;
+    }, {});
+    // 25ms balances UI responsiveness and throughput so large batches still update smoothly.
+    var FRAME_TIME_BUDGET_MILLISECONDS = 25;
+    var METRIC_LABELS = {
+      spins: 'number of spins',
+      nonCommonBoons: 'number of non-common boons',
+      runs: 'number of runs',
+      wheelGrowthSize: 'wheel growth size',
+      avgBoonRarity: 'average boon rarity',
+      avgBoonSelectability: 'average boon selectability'
+    };
+    var METRIC_IS_DISCRETE = {
+      spins: true,
+      nonCommonBoons: true,
+      runs: true,
+      wheelGrowthSize: true
+    };
+
+    function formatBoonRange(rg) {
+      if (!rg) return 'N/A';
+      if (rg.int === true || rg.min === rg.max) return String(rg.min);
+      if (rg.step) return rg.min + ' to ' + rg.max + ' (step ' + rg.step + ')';
+      return rg.min + ' to ' + rg.max;
+    }
+
+    function formatBoonMeta(boon) {
+      var parts = [boon.rarity];
+      if (boon.desc) parts.push(boon.desc);
+      if (!boon.valueRanges) return parts.join(' · ');
+      var keys = Object.keys(boon.valueRanges);
+      if (!keys.length) return parts.join(' · ');
+      var ranges = keys.map(function(key) {
+        return key + ': ' + formatBoonRange(boon.valueRanges[key]);
+      }).join(', ');
+      parts.push('Range: ' + ranges);
+      return parts.join(' · ');
+    }
+
+    function highestShopRarity(choices) {
+      var best = 'common';
+      for (var i = 0; i < choices.length; i++) {
+        var rarity = choices[i].rarity || 'common';
+        if ((RARITY_RANK[rarity] || 0) > (RARITY_RANK[best] || 0)) best = rarity;
+      }
+      return best;
+    }
+
+    function makeRunRow(run, runNumber) {
+      var row = document.createElement('div');
+      row.className = 'run-row';
+
+      var head = document.createElement('div');
+      head.className = 'run-row-head';
+      head.textContent = 'Run #' + runNumber + ' · Spins: ' + run.spins + ' · Picks: ' + run.picks.length;
+      row.appendChild(head);
+
+      if (!run.picks.length) {
+        var empty = document.createElement('div');
+        empty.className = 'run-empty';
+        empty.textContent = 'No boons picked';
+        row.appendChild(empty);
+        return row;
+      }
+
+      var picksWrap = document.createElement('div');
+      picksWrap.className = 'run-picks';
+      run.picks.forEach(function(pick) {
+        var outer = document.createElement('span');
+        outer.className = 'run-pick-wrap';
+        outer.style.borderColor = RC[pick.shopHighestRarity] || '#444';
+
+        var inner = document.createElement('span');
+        inner.className = 'run-pick';
+        inner.style.borderColor = RC[pick.boon.rarity] || '#555';
+        inner.style.color = RC[pick.boon.rarity] || '#ddd';
+        inner.textContent = pick.boon.name;
+        inner.title =
+          'Picked: ' + formatBoonMeta(pick.boon) +
+          ' | Highest rarity offered this shop: ' + pick.shopHighestRarity;
+        outer.appendChild(inner);
+        picksWrap.appendChild(outer);
+      });
+      row.appendChild(picksWrap);
+      return row;
+    }
+
+    function appendRunLogs(startInclusive, endExclusive) {
+      var frag = document.createDocumentFragment();
+      for (var i = startInclusive; i < endExclusive; i++) {
+        frag.appendChild(makeRunRow(results[i], i + 1));
+      }
+      runLogEl.appendChild(frag);
+      runLogEl.scrollTop = runLogEl.scrollHeight;
+    }
+
+    function cloneTiles() {
+      return INIT_TILES.map(function(t) { return { id: t.id, type: t.type }; });
+    }
+
+    function renderBoonList() {
+      boonList.innerHTML = '';
+      for (var i = 0; i < orderedBoons.length; i++) {
+        var b = orderedBoons[i];
+        var li = document.createElement('li');
+        li.draggable = true;
+        li.dataset.id = b.id;
+        var ratingHtml = '';
+        if (boonRatings[b.id] != null) {
+          var br = boonRatings[b.id];
+          var rPct = br.maxPossible > 0 ? Math.round(br.bordaScore / br.maxPossible * 100) : 0;
+          ratingHtml = '<div class="rating">pairwise wins: ' + br.bordaScore + ' / ' + br.maxPossible + ' (' + rPct + '%)</div>';
+        }
+        li.innerHTML =
+          '<div class="row">' +
+            '<strong style="color:' + RC[b.rarity] + '">' + (i + 1) + '. ' + b.name + '</strong>' +
+            '<span style="color:#aaa">value ' + (orderedBoons.length - i) + '</span>' +
+          '</div>' +
+          ratingHtml +
+          '<div class="meta">' + formatBoonMeta(b) + '</div>';
+        boonList.appendChild(li);
+      }
+    }
+
+    function getCurrentPriority() {
+      var ids = Array.from(boonList.querySelectorAll('li')).map(function(li) { return li.dataset.id; });
+      var map = {};
+      for (var i = 0; i < ids.length; i++) {
+        map[ids[i]] = ids.length - i;
+      }
+      return map;
+    }
+
+    function chooseByPriority(choices, prioMap) {
+      var best = choices[0];
+      var bestVal = prioMap[best.id] || 0;
+      for (var i = 1; i < choices.length; i++) {
+        var c = choices[i];
+        var val = prioMap[c.id] || 0;
+        if (val > bestVal) {
+          best = c;
+          bestVal = val;
+        }
+      }
+      return { boon: best, value: bestVal };
+    }
+
+    function getMetricValue(run, metric) {
+      if (metric === 'spins') return run.spins;
+      if (metric === 'nonCommonBoons') return run.nonCommonBoons;
+      if (metric === 'runs') return run.runNumber;
+      if (metric === 'wheelGrowthSize') return run.wheelGrowthSize;
+      if (metric === 'avgBoonRarity') return run.avgBoonRarity;
+      if (metric === 'avgBoonSelectability') return run.avgBoonSelectability;
+      return 0;
+    }
+
+    function getSelectedMetrics() {
+      return {
+        xMetric: xMetricSelect.value,
+        yMetric: yMetricSelect.value,
+        colorMetric: colorMetricSelect.value
+      };
+    }
+
+    function updatePlotDescription(metrics) {
+      var xLabel = METRIC_LABELS[metrics.xMetric] || metrics.xMetric;
+      var yLabel = METRIC_LABELS[metrics.yMetric] || metrics.yMetric;
+      var cLabel = METRIC_LABELS[metrics.colorMetric] || metrics.colorMetric;
+      plotDescriptionEl.textContent = 'Dot plot: x = ' + xLabel + ', y = ' + yLabel + ' · color gradient = ' + cLabel;
+      canvas.setAttribute('aria-label', 'Dot plot of simulation runs. Horizontal axis is ' + xLabel + ', vertical axis is ' + yLabel + ', and dot color gradient represents ' + cLabel + '.');
+    }
+
+    function formatMetricValue(metric, value) {
+      if (!Number.isFinite(value)) return '0';
+      if (METRIC_IS_DISCRETE[metric]) return String(Math.round(value));
+      return value.toFixed(2);
+    }
+
+    function setDebugVisibility(show) {
+      runDebugSubEl.style.display = show ? '' : 'none';
+      runLogEl.style.display = show ? '' : 'none';
+    }
+
+    function appendRunLogsBatched(startInclusive, endExclusive) {
+      if (startInclusive >= endExclusive) return;
+      var cursor = startInclusive;
+      function step() {
+        var frameStart = performance.now();
+        var chunkStart = cursor;
+        while (cursor < endExclusive && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
+          cursor += 1;
+        }
+        appendRunLogs(chunkStart, cursor);
+        if (cursor < endExclusive) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    function runSingle(prioMap, options) {
+      var tiles = cloneTiles();
+      var boons = [];
+      var sc = 0;
+      var gl = 0;
+      var nid = 6;
+      var shopsSeen = 0;
+      var pickedVals = [];
+      var pickedRarityScores = [];
+      var picks = [];
+      var nonCommonBoons = 0;
+      // Safety cap prevents a pathological run from looping forever.
+      var cap = options.maxSpinsPerRun;
+
+      while (cap-- > 0) {
+        sc += 1;
+        var nChoices = 3 + boons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
+        var prep = prepareSpin(tiles, boons);
+        tiles = prep.tiles;
+        boons = prep.boons;
+        var layout = buildLayout(tiles, boons, true);
+        var idx = pickWeighted(layout);
+        var result = layout[idx].type;
+
+        if (result === 'lose') {
+          var res = tryRescue(boons);
+          result = res.ok ? 'win' : 'lose';
+          boons = res.boons;
+        }
+        if (result === 'lose') break;
+        var forcedGrowth = enforceMinimumLoseAreaAfterSpin(tiles, boons, nid);
+        if (forcedGrowth.grew) {
+          tiles = forcedGrowth.tiles;
+          boons = forcedGrowth.boons;
+          nid = forcedGrowth.nextId;
+          gl += 1;
+        }
+
+        var shop = drawBoons(nChoices, gl, boons, { firstShop: shopsSeen === 0 });
+        var choices = shop.choices;
+        var shopTopRarity = highestShopRarity(choices);
+        boons = shop.boons;
+        shopsSeen += 1;
+        if (!choices.length) break;
+
+        var picked = chooseByPriority(choices, prioMap);
+        var applied = applyBoon(picked.boon, tiles, boons, nid);
+        tiles = applied.tiles;
+        boons = applied.boons;
+        nid = applied.nextId;
+        pickedVals.push(picked.value);
+        pickedRarityScores.push(RARITY_RANK[picked.boon.rarity] || 0);
+        if ((picked.boon.rarity || 'common') !== 'common') nonCommonBoons += 1;
+        picks.push({
+          boon: {
+            name: picked.boon.name,
+            rarity: picked.boon.rarity,
+            desc: picked.boon.desc,
+            valueRanges: picked.boon.valueRanges || null
+          },
+          shopHighestRarity: shopTopRarity
+        });
+        if (applied.grew) gl += 1;
+      }
+
+      var avgSelectability = 0;
+      if (pickedVals.length) {
+        var sum = pickedVals.reduce(function(s, v) { return s + v; }, 0);
+        avgSelectability = sum / pickedVals.length;
+      }
+      var avgRarity = 0;
+      if (pickedRarityScores.length) {
+        var raritySum = pickedRarityScores.reduce(function(s, v) { return s + v; }, 0);
+        avgRarity = raritySum / pickedRarityScores.length;
+      }
+      return {
+        spins: sc,
+        nonCommonBoons: nonCommonBoons,
+        wheelGrowthSize: gl,
+        avgBoonRarity: avgRarity,
+        avgBoonSelectability: avgSelectability,
+        picks: picks
+      };
+    }
+
+    function drawPlot(data, metrics) {
+      var w = canvas.width, h = canvas.height;
+      var ml = 56, mr = 18, mt = 18, mb = 46;
+      var pw = w - ml - mr;
+      var ph = h - mt - mb;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#0d0d0d';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = '#404040';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ml, mt);
+      ctx.lineTo(ml, h - mb);
+      ctx.lineTo(w - mr, h - mb);
+      ctx.stroke();
+
+      if (!data.length) {
+        updatePlotDescription(metrics || getSelectedMetrics());
+        return;
+      }
+
+      var xMetric = metrics.xMetric;
+      var yMetric = metrics.yMetric;
+      var colorMetric = metrics.colorMetric;
+      updatePlotDescription(metrics);
+
+      var xValues = data.map(function(run) { return getMetricValue(run, xMetric); });
+      var yValues = data.map(function(run) { return getMetricValue(run, yMetric); });
+      var cValues = data.map(function(run) { return getMetricValue(run, colorMetric); });
+
+      var xMin = Math.min.apply(null, xValues);
+      var xMax = Math.max.apply(null, xValues);
+      var yMin = Math.min.apply(null, yValues);
+      var yMax = Math.max.apply(null, yValues);
+      var cMin = Math.min.apply(null, cValues);
+      var cMax = Math.max.apply(null, cValues);
+
+      if (xMin === xMax) xMax = xMin + 1;
+      if (yMin === yMax) yMax = yMin + 1;
+      var xTicks = 8;
+
+      ctx.fillStyle = '#7a7a7a';
+      ctx.font = '12px monospace';
+
+      for (var i = 0; i <= xTicks; i++) {
+        var xRatio = i / xTicks;
+        var xv = xMin + (xMax - xMin) * xRatio;
+        var x = ml + xRatio * pw;
+        var xTickLabel = formatMetricValue(xMetric, xv);
+        ctx.strokeStyle = '#222';
+        ctx.beginPath();
+        ctx.moveTo(x, mt);
+        ctx.lineTo(x, h - mb);
+        ctx.stroke();
+        ctx.fillText(xTickLabel, x - ctx.measureText(xTickLabel).width / 2, h - mb + 16);
+      }
+
+      var yTickCount = 5;
+      for (var yi = 0; yi <= yTickCount; yi++) {
+        var yRatio = yi / yTickCount;
+        var yv = yMin + (yMax - yMin) * yRatio;
+        var py = h - mb - yRatio * ph;
+        var yTickLabel = formatMetricValue(yMetric, yv);
+        ctx.strokeStyle = '#1f1f1f';
+        ctx.beginPath();
+        ctx.moveTo(ml, py);
+        ctx.lineTo(w - mr, py);
+        ctx.stroke();
+        ctx.fillStyle = '#7a7a7a';
+        ctx.fillText(yTickLabel, ml - 8 - ctx.measureText(yTickLabel).width, py + 4);
+      }
+
+      ctx.fillStyle = '#9f9f9f';
+      var xAxisLabel = METRIC_LABELS[xMetric] || xMetric;
+      var yAxisLabel = METRIC_LABELS[yMetric] || yMetric;
+      ctx.fillText(xAxisLabel, ml + (pw - ctx.measureText(xAxisLabel).width) / 2, h - 12);
+      ctx.save();
+      ctx.translate(14, mt + ph / 2 + 36);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(yAxisLabel, 0, 0);
+      ctx.restore();
+
+      var dotR = 3;
+      var MAX_RED_COMPONENT = 220;
+      var MAX_GREEN_COMPONENT = 200;
+      var cSpan = cMax - cMin;
+
+      for (var ri = 0; ri < data.length; ri++) {
+        var run = data[ri];
+        var xv = getMetricValue(run, xMetric);
+        var yv = getMetricValue(run, yMetric);
+        var cv = getMetricValue(run, colorMetric);
+        var bx = ml + ((xv - xMin) / (xMax - xMin)) * pw;
+        var by = h - mb - ((yv - yMin) / (yMax - yMin)) * ph;
+        var t = cSpan === 0 ? 0.5 : Math.min(Math.max((cv - cMin) / cSpan, 0), 1);
+        var rc = Math.round(t * MAX_RED_COMPONENT);
+        var gc = Math.round((1 - t) * MAX_GREEN_COMPONENT);
+        ctx.fillStyle = 'rgba(' + rc + ',' + gc + ',20,0.65)';
+        ctx.beginPath();
+        ctx.arc(bx, by, dotR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function runSimulation(totalRuns, options) {
+      results = [];
+      var done = 0;
+      var prioMap = getCurrentPriority();
+      runBtn.disabled = true;
+      statusEl.textContent = 'Running 0 / ' + totalRuns + '...';
+      runLogEl.innerHTML = '';
+      setDebugVisibility(options.showDebug);
+
+      function step() {
+        var prevDone = done;
+        var frameStart = performance.now();
+        while (done < totalRuns && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
+          var runResult = runSingle(prioMap, options);
+          runResult.runNumber = done + 1;
+          results.push(runResult);
+          done += 1;
+        }
+        drawPlot(results, options.metrics);
+        if (options.showDebug && done > prevDone) appendRunLogs(prevDone, done);
+        statusEl.textContent = 'Running ' + done + ' / ' + totalRuns + '...';
+        if (done < totalRuns) requestAnimationFrame(step);
+        else {
+          var avgSpins = results.reduce(function(s, r) { return s + r.spins; }, 0) / results.length;
+          var avgBoon = results.reduce(function(s, r) { return s + r.avgBoonSelectability; }, 0) / results.length;
+          statusEl.textContent =
+            'Done. Runs: ' + totalRuns +
+            ' | Avg spins: ' + avgSpins.toFixed(2) +
+            ' | Avg boon selectability: ' + avgBoon.toFixed(2);
+          runBtn.disabled = false;
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    // ── Permutation search via pairwise tournament graph ─────────────────────
+    // For each random permutation we record avg spins and accumulate, for every
+    // ordered pair (A ranked above B), the avg-spins contribution.  After all
+    // samples we build a directed preference graph (edge A→B when A-before-B
+    // yields higher expected spins) and rank boons by their Borda score (count
+    // of pairwise wins), giving a graph-theoretically optimal ordering.
+
+    function shuffleArray(arr) {
+      var a = arr.slice();
+      for (var i = a.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+      }
+      return a;
+    }
+
+    function runPermutations(numPerms, runsPerPerm, simOptions) {
+      var boonIds = orderedBoons.map(function(b) { return b.id; });
+      var n = boonIds.length;
+
+      // pairData[idA][idB].{totalSpins, count}: accumulated avg-spins across
+      // all sampled permutations in which boon A was ranked above boon B.
+      var pairData = {};
+      boonIds.forEach(function(idA) {
+        pairData[idA] = {};
+        boonIds.forEach(function(idB) {
+          if (idA !== idB) pairData[idA][idB] = { totalSpins: 0, count: 0 };
+        });
+      });
+
+      var done = 0;
+      var bestPerm = null;
+      var bestAvgSpins = -Infinity;
+
+      permBtn.disabled = true;
+      runBtn.disabled = true;
+      spinner.classList.add('active');
+      statusEl.textContent = 'Running permutations 0 / ' + numPerms + '\u2026';
+
+      function step() {
+        var frameStart = performance.now();
+        while (done < numPerms && performance.now() - frameStart < FRAME_TIME_BUDGET_MILLISECONDS) {
+          var permOrder = shuffleArray(orderedBoons);
+
+          var prioMap = {};
+          for (var i = 0; i < permOrder.length; i++) {
+            prioMap[permOrder[i].id] = permOrder.length - i;
+          }
+
+          var totalSpins = 0;
+          for (var r = 0; r < runsPerPerm; r++) {
+            totalSpins += runSingle(prioMap, simOptions).spins;
+          }
+          var avgSpins = totalSpins / runsPerPerm;
+
+          // Accumulate pairwise stats in O(N²/2) per permutation.
+          // In a uniform random permutation, E[spins | A before B] vs
+          // E[spins | B before A] gives an unbiased causal estimate of
+          // whether ranking A above B is beneficial.
+          for (var i = 0; i < permOrder.length; i++) {
+            for (var j = i + 1; j < permOrder.length; j++) {
+              var idFirst  = permOrder[i].id; // ranked higher
+              var idSecond = permOrder[j].id; // ranked lower
+              pairData[idFirst][idSecond].totalSpins += avgSpins;
+              pairData[idFirst][idSecond].count      += 1;
+            }
+          }
+
+          if (avgSpins > bestAvgSpins) {
+            bestAvgSpins = avgSpins;
+            bestPerm = permOrder.slice();
+          }
+          done++;
+        }
+
+        statusEl.textContent = 'Running permutations ' + done + ' / ' + numPerms + '\u2026';
+        if (done < numPerms) {
+          requestAnimationFrame(step);
+        } else {
+          finishPermutations(pairData, bestAvgSpins, boonIds, n);
+        }
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    function finishPermutations(pairData, bestAvgSpins, boonIds, n) {
+      // Build directed preference graph and compute Borda scores.
+      // Edge A→B exists when E[spins | A before B] > E[spins | B before A].
+      // Borda score for A = |{B : A beats B pairwise}|.
+      var bordaScores = {};
+      boonIds.forEach(function(id) { bordaScores[id] = 0; });
+
+      var numEdges = 0;
+      for (var ai = 0; ai < boonIds.length; ai++) {
+        for (var bi = ai + 1; bi < boonIds.length; bi++) {
+          var idA = boonIds[ai];
+          var idB = boonIds[bi];
+          var statAB = pairData[idA] && pairData[idA][idB]; // A ranked above B
+          var statBA = pairData[idB] && pairData[idB][idA]; // B ranked above A
+          if (!statAB || !statBA || statAB.count === 0 || statBA.count === 0) continue;
+          var avgAB = statAB.totalSpins / statAB.count;
+          var avgBA = statBA.totalSpins / statBA.count;
+          if (avgAB > avgBA) { bordaScores[idA]++; numEdges++; }
+          else if (avgBA > avgAB) { bordaScores[idB]++; numEdges++; }
+        }
+      }
+
+      // Sort boons by Borda score descending — graph-theoretically optimal ordering.
+      orderedBoons = orderedBoons.slice().sort(function(a, b) {
+        return (bordaScores[b.id] || 0) - (bordaScores[a.id] || 0);
+      });
+
+      var maxPossible = boonIds.length - 1;
+      boonRatings = {};
+      boonIds.forEach(function(id) {
+        boonRatings[id] = { bordaScore: bordaScores[id] || 0, maxPossible: maxPossible };
+      });
+
+      renderBoonList();
+
+      var totalPairs = boonIds.length * (boonIds.length - 1) / 2;
+      statusEl.textContent =
+        'Permutations done. Best sampled avg spins: ' + bestAvgSpins.toFixed(2) +
+        ' \u00b7 Borda ordering applied (' + boonIds.length + ' nodes, ' +
+        totalPairs + ' pairwise edges analysed).';
+      spinner.classList.remove('active');
+      permBtn.disabled = false;
+      runBtn.disabled = false;
+    }
+
+    permBtn.addEventListener('click', function() {
+      var numPerms = parseInt(permCountInput.value, 10);
+      var maxSpinsPerRun = parseInt(maxSpinsInput.value, 10);
+      // Use at least 20 runs per permutation for a stable mean; divide the
+      // configured run count by 8 so total simulation work stays comparable
+      // to a normal single-ordering run (500 perms × runs/8 ≈ 62.5× runs).
+      var runsPerPerm = Math.max(20, Math.floor(parseInt(runsInput.value, 10) / 8));
+      if (!Number.isFinite(numPerms) || numPerms < 1) {
+        statusEl.textContent = 'Enter a valid number of permutations.';
+        return;
+      }
+      if (!Number.isFinite(maxSpinsPerRun) || maxSpinsPerRun < 1) {
+        statusEl.textContent = 'Enter a valid max spins per run (minimum 1).';
+        return;
+      }
+      runPermutations(numPerms, runsPerPerm, {
+        maxSpinsPerRun: maxSpinsPerRun,
+        showDebug: false
+      });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    boonList.addEventListener('dragstart', function(e) {
+      var li = e.target.closest('li');
+      if (!li) return;
+      dragItem = li;
+      li.classList.add('dragging');
+    });
+    boonList.addEventListener('dragend', function(e) {
+      var li = e.target.closest('li');
+      if (li) li.classList.remove('dragging');
+      dragItem = null;
+      orderedBoons = Array.from(boonList.querySelectorAll('li')).map(function(node) {
+        var id = node.dataset.id;
+        return boonById[id] || null;
+      }).filter(Boolean);
+      renderBoonList();
+    });
+    boonList.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      if (!dragItem) return;
+      var rows = Array.from(boonList.querySelectorAll('li:not(.dragging)'));
+      var next = null;
+      for (var i = 0; i < rows.length; i++) {
+        var box = rows[i].getBoundingClientRect();
+        var offset = e.clientY - (box.top + box.height / 2);
+        if (offset < 0) { next = rows[i]; break; }
+      }
+      if (next) boonList.insertBefore(dragItem, next);
+      else boonList.appendChild(dragItem);
+    });
+
+    runBtn.addEventListener('click', function() {
+      var runs = parseInt(runsInput.value, 10);
+      var maxSpinsPerRun = parseInt(maxSpinsInput.value, 10);
+      if (!Number.isFinite(runs) || runs < 1) {
+        statusEl.textContent = 'Enter a valid positive number of runs.';
+        return;
+      }
+      if (!Number.isFinite(maxSpinsPerRun) || maxSpinsPerRun < 1) {
+        statusEl.textContent = 'Enter a valid max spins per run (minimum 1).';
+        return;
+      }
+      var metrics = getSelectedMetrics();
+      runSimulation(runs, {
+        maxSpinsPerRun: maxSpinsPerRun,
+        showDebug: showDebugInput.checked,
+        metrics: metrics
+      });
+    });
+
+    [xMetricSelect, yMetricSelect, colorMetricSelect].forEach(function(selectEl) {
+      selectEl.addEventListener('change', function() {
+        var metrics = getSelectedMetrics();
+        updatePlotDescription(metrics);
+        if (results.length) drawPlot(results, metrics);
+      });
+    });
+
+    showDebugInput.addEventListener('change', function() {
+      var show = showDebugInput.checked;
+      setDebugVisibility(show);
+      if (show && results.length && !runLogEl.children.length) appendRunLogsBatched(0, results.length);
+    });
+
+    renderBoonList();
+    setDebugVisibility(showDebugInput.checked);
+    drawPlot([], getSelectedMetrics());

@@ -1,0 +1,1043 @@
+    const { useState, useRef, useCallback, useEffect } = React;
+      const {
+        CX, CY, R, LAND, BOONS, RC, INIT_TILES,
+        slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
+        pickWeighted, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
+        getStackedDesc, instantiateTemplate,
+      } = window.Pick3Logic;
+
+      // Build a template map for boon deserialization
+      var BOON_TEMPLATE_MAP = {};
+      BOONS.forEach(function(b) { BOON_TEMPLATE_MAP[b.id] = b; });
+
+      // ── Persistent storage helpers ──────────────────────────────────────────
+      var RUN_KEY  = 'pick3_run';
+      var COLL_KEY = 'pick3_collection';
+
+      function loadRunState() {
+        try { var s = localStorage.getItem(RUN_KEY); return s ? JSON.parse(s) : null; }
+        catch(e) { return null; }
+      }
+      function saveRunState(state) {
+        try { localStorage.setItem(RUN_KEY, JSON.stringify(state)); } catch(e) {}
+      }
+      function clearRunState() {
+        try { localStorage.removeItem(RUN_KEY); } catch(e) {}
+      }
+      function loadCollection() {
+        try { var s = localStorage.getItem(COLL_KEY); return new Set(s ? JSON.parse(s) : []); }
+        catch(e) { return new Set(); }
+      }
+      function saveCollection(col) {
+        try { localStorage.setItem(COLL_KEY, JSON.stringify(Array.from(col))); } catch(e) {}
+      }
+
+      // Serialize a boon to plain JSON (strips functions)
+      function serializeBoon(b) {
+        var out = {};
+        Object.keys(b).forEach(function(k) { if (typeof b[k] !== 'function') out[k] = b[k]; });
+        return out;
+      }
+      // Reconstruct a boon from its serialized form by re-attaching template functions
+      function deserializeBoon(saved) {
+        if (!saved || !saved.id) return null;
+        var tpl = BOON_TEMPLATE_MAP[saved.id];
+        if (!tpl) return null;
+        var fresh = instantiateTemplate(tpl);
+        Object.keys(saved).forEach(function(k) { fresh[k] = saved[k]; });
+        return fresh;
+      }
+
+    // BoonTag — tooltip via CSS class toggle + hover, no portal
+    function BoonTag(props) {
+      var DRAG_THRESHOLD_DISTANCE_SQUARED = 25; // 5px distance threshold (5^2) before treating pointer interaction as a drag.
+      var b = props.b;
+      var large = props.large;
+      var shaking = props.shaking;
+      var draggable = props.draggable;
+      var [pinned, setPinned] = useState(false);
+      var startRef = useRef(null);
+      var movedRef = useRef(false);
+      var c = RC[b.rarity];
+      var sz = large
+        ? { padding: '4px 11px', fontSize: '.7rem' }
+        : { padding: '3px 8px',  fontSize: '.62rem' };
+      var cls = 'boon-tag' + (pinned ? ' pinned' : '') + (shaking ? ' shaking' : '');
+
+      return (
+        <span
+          className={cls}
+          data-boon-iid={b.iid}
+          onPointerDown={function(e) {
+            if (draggable) {
+              startRef.current = { x: e.clientX, y: e.clientY };
+              movedRef.current = false;
+            }
+            if (props.onPointerDown) props.onPointerDown(e);
+          }}
+          onPointerMove={function(e) {
+            if (draggable && startRef.current) {
+              var dx = e.clientX - startRef.current.x;
+              var dy = e.clientY - startRef.current.y;
+              if ((dx * dx + dy * dy) > DRAG_THRESHOLD_DISTANCE_SQUARED) movedRef.current = true;
+            }
+            if (props.onPointerMove) props.onPointerMove(e);
+          }}
+          onPointerUp={function(e) {
+            startRef.current = null;
+            if (props.onPointerUp) props.onPointerUp(e);
+          }}
+          onPointerCancel={function(e) {
+            startRef.current = null;
+            if (props.onPointerCancel) props.onPointerCancel(e);
+          }}
+          onClick={function(e) {
+            e.stopPropagation();
+            if (movedRef.current) {
+              movedRef.current = false;
+              return;
+            }
+            setPinned(function(p) { return !p; });
+          }}
+          style={Object.assign({}, sz, {
+            border: '1px solid ' + c,
+            borderRadius: '2px',
+            color: c,
+            background: pinned ? c + '28' : c + '14',
+            cursor: draggable ? 'grab' : 'pointer',
+            transition: 'background .12s',
+            fontFamily: "'Cinzel', serif",
+            outline: props.dropTarget ? ('1px dashed ' + c) : 'none',
+          })}
+        >
+          {b.name}{b.charges > 0 ? ' (' + b.charges + ')' : ''}
+          <span
+            className="boon-tip"
+            style={{ border: '1px solid ' + c, boxShadow: '0 4px 24px rgba(0,0,0,.8), 0 0 12px ' + c + '30' }}
+          >
+            <span style={{ display:'block', fontSize:'.58rem', color:c, letterSpacing:'.3em', textTransform:'uppercase', marginBottom:'5px', fontFamily:"'Cinzel',serif" }}>
+              {b.rarity}
+            </span>
+            <span style={{ display:'block', fontSize:'.82rem', color:'#e0e0e0', fontFamily:"'Cinzel',serif", fontWeight:600, marginBottom:'6px', lineHeight:1.25 }}>
+              {b.name}
+            </span>
+            <span style={{ display:'block', fontSize:'.7rem', color:'#888', lineHeight:1.5, fontFamily:'Georgia,serif' }}>
+              {b.desc}
+            </span>
+            <span className="tip-arrow" style={{ borderTop: '7px solid ' + c }} />
+          </span>
+        </span>
+      );
+    }
+
+    var NO_TRACK = (new URLSearchParams(window.location.search)).has('notrack');
+
+    function App() {
+      var SHAKE_INTERVAL_MS = 120;
+      var SHAKE_CLEAR_DELAY_MS = 140;
+      var SPIN_INTERACT_GUARD_MS = 80;
+      var _s1  = useState(INIT_TILES); var tiles = _s1[0]; var setTiles = _s1[1];
+      var _s2  = useState([]);         var boons = _s2[0]; var setBoons = _s2[1];
+      var _s3  = useState(0);          var sc    = _s3[0]; var setSc    = _s3[1];
+      var _s4  = useState(0);          var gl    = _s4[0]; var setGl    = _s4[1];
+      var _s5  = useState('idle');     var phase = _s5[0]; var setPhase = _s5[1];
+      var _s6  = useState(0);          var wdeg  = _s6[0]; var setWdeg  = _s6[1];
+      var _s7  = useState(false);      var anim  = _s7[0]; var setAnim  = _s7[1];
+      var _s8  = useState(null);       var rtile = _s8[0]; var setRtile = _s8[1];
+      var _s9  = useState([]);         var choices = _s9[0]; var setChoices = _s9[1];
+      var _s10 = useState(6);          var nid   = _s10[0]; var setNid   = _s10[1];
+      var _s11 = useState(0);          var shopsSeen = _s11[0]; var setShopsSeen = _s11[1];
+      var _s12 = useState([]);         var flippedTiles = _s12[0]; var setFlippedTiles = _s12[1];
+      var _s13 = useState(null);       var shakingBoon = _s13[0]; var setShakingBoon = _s13[1];
+      var _s14 = useState(false);      var revealFlip = _s14[0]; var setRevealFlip = _s14[1];
+      var _s15 = useState(null);       var dragIid = _s15[0]; var setDragIid = _s15[1];
+      var _s16 = useState(null);       var dragOverIid = _s16[0]; var setDragOverIid = _s16[1];
+      var _s17 = useState(0);          var nonCommonPickStreak = _s17[0]; var setNonCommonPickStreak = _s17[1];
+      var _s18 = useState(loadCollection); var collection = _s18[0]; var setCollection = _s18[1];
+      var _s19 = useState(false);      var showCollection = _s19[0]; var setShowCollection = _s19[1];
+
+      var spinRef = useRef(null);
+      var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null), t4 = useRef([]);
+      var spinGuardTimeoutRef = useRef(null);
+      var doneRef = useRef(false);
+      var revDone = useRef(false);
+      var spinInteractGuardRef = useRef(false);
+      var dragPointerTargetRef = useRef(null);
+      var dragPointerIdRef = useRef(null);
+
+      var nChoices = 3 + boons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
+      var shopRerolls = getShopRerolls(boons, gl);
+
+      var advance = useCallback(function() {
+        if (revDone.current) return;
+        revDone.current = true;
+        clearTimeout(t2.current);
+        var d = spinRef.current;
+        if (d.result === 'win') {
+          var boonsForShop = d.fb;
+          var growthAdjustedLevel = d.gl;
+          if (d.postSpinGrowth && d.postSpinGrowth.grew) {
+            setTiles(d.postSpinGrowth.tiles);
+            setNid(d.postSpinGrowth.nextId);
+            boonsForShop = d.postSpinGrowth.boons;
+            growthAdjustedLevel += 1;
+            setGl(function(g) { return g + 1; });
+            var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
+              firstShop: d.shopsSeen === 0,
+              nonCommonPickStreak: d.nonCommonPickStreak,
+            });
+            setBoons(shop.boons);
+            setChoices(shop.choices);
+            setShopsSeen(function(n) { return n + 1; });
+            setPhase('growing');
+            t3.current = setTimeout(function() { setPhase('boon_select'); }, 1900);
+          } else {
+            var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
+              firstShop: d.shopsSeen === 0,
+              nonCommonPickStreak: d.nonCommonPickStreak,
+            });
+            setBoons(shop.boons);
+            setChoices(shop.choices);
+            setShopsSeen(function(n) { return n + 1; });
+            setPhase('boon_select');
+          }
+        }
+        else setPhase('game_over');
+      }, []);
+
+      var finalizeReveal = useCallback(function(d) {
+        setAnim(false);
+        setWdeg(d.targetDeg);
+        setBoons(d.fb);
+        setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan });
+        setRevealFlip(false);
+        setPhase('reveal');
+        setSc(function(n) { return n + 1; });
+        revDone.current = false;
+        t2.current = setTimeout(advance, 720);
+      }, [advance]);
+
+      var finish = useCallback(function() {
+        if (doneRef.current) return;
+        doneRef.current = true;
+        clearTimeout(t1.current);
+        var d = spinRef.current;
+        if (!d) return;
+
+        t4.current.forEach(function(tid) { clearTimeout(tid); });
+        t4.current = [];
+        setShakingBoon(null);
+
+        var chain = d.triggered || [];
+        if (chain.length > 0) {
+          chain.forEach(function(token, idx) {
+            var tid = setTimeout(function() { setShakingBoon(token); }, idx * SHAKE_INTERVAL_MS);
+            t4.current.push(tid);
+          });
+          var clearTid = setTimeout(function() { setShakingBoon(null); }, chain.length * SHAKE_INTERVAL_MS + SHAKE_CLEAR_DELAY_MS);
+          t4.current.push(clearTid);
+          finalizeReveal(d);
+        } else {
+          finalizeReveal(d);
+        }
+      }, [finalizeReveal]);
+
+      var spin = useCallback(function() {
+        if (phase !== 'idle') return;
+        if (!NO_TRACK) { fetch('https://api.counterapi.dev/v2/pick3slop/spins/up').catch(function() {}); }
+        var prep = prepareSpin(tiles, boons);
+        var spinTiles = prep.tiles;
+        var spinBoons = prep.boons;
+        setTiles(spinTiles);
+        var layout = buildLayout(spinTiles, spinBoons, true);
+        var angles = calcAngles(layout);
+        var idx    = pickWeighted(layout);
+        var tc     = angles[idx].center;
+        var hs     = (angles[idx].end - angles[idx].start) / 2;
+        var cm     = wdeg % 360;
+        var delta  = ((LAND - tc - cm) % 360 + 360) % 360;
+        var target = wdeg + (5 + Math.floor(Math.random() * 4)) * 360 + delta;
+
+        var landed = layout[idx].type;
+        var result = landed, fb = spinBoons, triggered = [];
+        if (landed === 'lose') {
+          var res = tryRescue(spinBoons);
+          result = res.ok ? 'win' : 'lose';
+          fb = res.boons;
+          triggered = res.triggered || [];
+        }
+        var postSpinGrowth = null;
+        if (result === 'win') {
+          var growth = enforceMinimumLoseAreaAfterSpin(spinTiles, fb, nid);
+          if (growth.grew) postSpinGrowth = growth;
+        }
+
+        spinRef.current = {
+          targetDeg: target, result: result, baseType: landed, triggered: triggered,
+          fb: fb, postSpinGrowth: postSpinGrowth, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen,
+          nonCommonPickStreak: nonCommonPickStreak
+        };
+        doneRef.current = false;
+        spinInteractGuardRef.current = true;
+        clearTimeout(spinGuardTimeoutRef.current);
+        spinGuardTimeoutRef.current = setTimeout(function() {
+          spinInteractGuardRef.current = false;
+          spinGuardTimeoutRef.current = null;
+        }, SPIN_INTERACT_GUARD_MS);
+        setAnim(true);
+        setWdeg(target);
+        setPhase('spinning');
+        t1.current = setTimeout(finish, 3500);
+      }, [phase, tiles, boons, wdeg, nChoices, gl, shopsSeen, nonCommonPickStreak, finish]);
+
+      var handleInteract = useCallback(function(e) {
+        e.stopPropagation();
+        if (spinInteractGuardRef.current) return;
+        if (phase === 'spinning') finish();
+        else if (phase === 'reveal') advance();
+      }, [phase, finish, advance]);
+
+      var handleWheelClick = useCallback(function(e) {
+        if (phase !== 'idle') return;
+        e.preventDefault();
+        e.stopPropagation();
+        spin();
+      }, [phase, spin]);
+
+      var handleWheelKeyDown = useCallback(function(e) {
+        if (phase !== 'idle') return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          spin();
+        }
+      }, [phase, spin]);
+
+      useEffect(function() {
+        if (phase !== 'reveal' || !rtile) return;
+        if (rtile.baseType === 'lose' && rtile.type === 'win') {
+          var tid = setTimeout(function() { setRevealFlip(true); }, 140);
+          return function() { clearTimeout(tid); };
+        }
+      }, [phase, rtile]);
+
+      useEffect(function() {
+        return function() {
+          [t1, t2, t3, spinGuardTimeoutRef].forEach(function(r) { clearTimeout(r.current); });
+          t4.current.forEach(function(tid) { clearTimeout(tid); });
+          t4.current = [];
+        };
+      }, []);
+
+      // Restore saved run state on mount
+      useEffect(function() {
+        var saved = loadRunState();
+        if (!saved) return;
+        try {
+          var restoredBoons = (saved.boons || []).map(deserializeBoon).filter(Boolean);
+          setTiles(saved.tiles || INIT_TILES);
+          setBoons(restoredBoons);
+          setSc(saved.sc || 0);
+          setGl(saved.gl || 0);
+          setNid(saved.nid || 6);
+          setShopsSeen(saved.shopsSeen || 0);
+          setNonCommonPickStreak(saved.nonCommonPickStreak || 0);
+          setWdeg(saved.wdeg || 0);
+        } catch(e) { clearRunState(); }
+      }, []);
+
+      // Persist run state whenever core game state changes
+      useEffect(function() {
+        if (phase === 'game_over') { clearRunState(); return; }
+        if (phase !== 'idle') return;
+        try {
+          saveRunState({
+            tiles: tiles,
+            boons: boons.map(serializeBoon),
+            sc: sc, gl: gl, nid: nid,
+            shopsSeen: shopsSeen,
+            nonCommonPickStreak: nonCommonPickStreak,
+            wdeg: wdeg,
+          });
+        } catch(e) {}
+      }, [tiles, boons, sc, gl, nid, shopsSeen, nonCommonPickStreak, wdeg, phase]);
+
+      var pick = useCallback(function(boon) {
+        var res = applyBoon(boon, tiles, boons, nid);
+        setTiles(res.tiles);
+        setBoons(res.boons);
+        setNid(res.nextId);
+        setChoices([]);
+        setFlippedTiles(res.flippedIds || []);
+        if (res.flippedIds && res.flippedIds.length > 0) {
+          setTimeout(function() { setFlippedTiles([]); }, 560);
+        }
+        if (res.grew) {
+          setGl(function(g) { return g + 1; });
+          setPhase('growing');
+          t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
+        } else {
+          setPhase('idle');
+        }
+        if (!NO_TRACK && boon.rarity === 'legendary') { fetch('https://api.counterapi.dev/v2/pick3slop/legendary-boons/up').catch(function() {}); }
+        setNonCommonPickStreak(function(streak) {
+          return boon.rarity === 'common' ? 0 : (streak + 1);
+        });
+        setCollection(function(prev) {
+          var next = new Set(prev);
+          next.add(boon.id);
+          saveCollection(next);
+          return next;
+        });
+      }, [tiles, boons, nid]);
+
+      var rerollChoices = useCallback(function() {
+        if (phase !== 'boon_select') return;
+        var rr = rerollShop(nChoices, gl, boons, { nonCommonPickStreak: nonCommonPickStreak });
+        if (!rr.ok) return;
+        setBoons(rr.boons);
+        setChoices(rr.choices);
+      }, [phase, nChoices, gl, boons, nonCommonPickStreak]);
+
+      var restart = useCallback(function() {
+        [t1, t2, t3, spinGuardTimeoutRef].forEach(function(r) { clearTimeout(r.current); });
+        t4.current.forEach(function(tid) { clearTimeout(tid); });
+        t4.current = [];
+        doneRef.current = true;
+        revDone.current = true;
+        spinRef.current = null;
+        clearRunState();
+        setTiles(INIT_TILES);
+        setBoons([]); setSc(0); setGl(0); setPhase('idle');
+        setWdeg(0); setAnim(false); setRtile(null);
+        setFlippedTiles([]); setShakingBoon(null); setRevealFlip(false);
+        setDragIid(null); setDragOverIid(null);
+        setChoices([]); setNid(6); setShopsSeen(0); setNonCommonPickStreak(0);
+      }, []);
+
+      var shownBoons = boons.filter(function(b) { return b.effect !== 'add_win'; });
+      var flippedMap = {};
+      flippedTiles.forEach(function(id) { flippedMap[id] = true; });
+
+      // Build grouped display boons: collapse same-group boons into one icon
+      var displayBoonGroups = (function() {
+        var map = {};
+        var order = [];
+        shownBoons.forEach(function(b) {
+          var key = b.group || b.id;
+          if (!map[key]) { map[key] = []; order.push(key); }
+          map[key].push(b);
+        });
+        return order.map(function(key) {
+          var grp = map[key];
+          var first = grp[0];
+          var n = grp.length;
+          var totalCharges = grp.reduce(function(sum, b) { return sum + (b.charges || 0); }, 0);
+          return Object.assign({}, first, {
+            name: first.name + (n > 1 ? ' \xd7' + n : ''),
+            desc: getStackedDesc(grp),
+            charges: totalCharges,
+          });
+        });
+      })();
+
+      // Determine which group is shaking for highlight
+      var shakingGroupKey = null;
+      if (shakingBoon) {
+        var foundShaking = shownBoons.find(function(b) { return b.iid === shakingBoon; });
+        if (foundShaking) shakingGroupKey = foundShaking.group || foundShaking.id;
+      }
+
+      var reorderBoonsByIid = useCallback(function(fromIid, toIid) {
+        if (!fromIid || !toIid || fromIid === toIid) return;
+        setBoons(function(prev) {
+          var src = prev.findIndex(function(b) { return b.iid === fromIid; });
+          var dst = prev.findIndex(function(b) { return b.iid === toIid; });
+          if (src < 0 || dst < 0 || src === dst) return prev;
+          var next = prev.slice();
+          var moved = next.splice(src, 1)[0];
+          next.splice(dst, 0, moved);
+          return next;
+        });
+      }, []);
+
+      var startDragBoon = useCallback(function(e, iid) {
+        if (phase !== 'idle') return;
+        e.preventDefault();
+        if (e.currentTarget && e.currentTarget.setPointerCapture) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+        dragPointerTargetRef.current = e.currentTarget;
+        dragPointerIdRef.current = e.pointerId;
+        setDragIid(iid);
+        setDragOverIid(iid);
+      }, [phase]);
+
+      var moveDragBoon = useCallback(function(e) {
+        if (!dragIid) return;
+        e.preventDefault();
+        var target = document.elementFromPoint(e.clientX, e.clientY);
+        var holder = target ? target.closest('[data-boon-iid]') : null;
+        var overIid = holder ? holder.getAttribute('data-boon-iid') : null;
+        if (!overIid) return;
+        setDragOverIid(overIid);
+      }, [dragIid]);
+
+      var releaseDragPointerCapture = useCallback(function() {
+        var ptrTarget = dragPointerTargetRef.current;
+        var ptrId = dragPointerIdRef.current;
+        if (ptrTarget && ptrTarget.releasePointerCapture && ptrId !== null) {
+          try { ptrTarget.releasePointerCapture(ptrId); } catch (err) { /* Pointer may already be released/cancelled. */ }
+        }
+        dragPointerTargetRef.current = null;
+        dragPointerIdRef.current = null;
+      }, []);
+
+      var endDragBoon = useCallback(function() {
+        releaseDragPointerCapture();
+        reorderBoonsByIid(dragIid, dragOverIid);
+        setDragIid(null);
+        setDragOverIid(null);
+      }, [dragIid, dragOverIid, reorderBoonsByIid, releaseDragPointerCapture]);
+
+      var cancelDragBoon = useCallback(function() {
+        releaseDragPointerCapture();
+        setDragIid(null);
+        setDragOverIid(null);
+      }, [releaseDragPointerCapture]);
+
+      var dl   = buildLayout(tiles, boons, false);
+      var da   = calcAngles(dl);
+      var wins = tiles.filter(function(t) { return t.type === 'win'; }).length;
+      var isOverlay = phase === 'boon_select' || phase === 'game_over';
+      var totalBoons = BOONS.length;
+      var seenBoons  = BOONS.filter(function(b) { return collection.has(b.id); }).length;
+
+      // Divider-suppression: skip the stroke between two adjacent same-type tiles when
+      // the smaller tile's outer arc is < DIVIDER_SKIP_PX screen-pixels.
+      // The SVG renders at SVG_RENDER_PX wide over a SVG_VIEWBOX-unit viewBox (R=175 units).
+      // Rearranging arc_px = R * θ_deg * π/180 * (SVG_RENDER_PX/SVG_VIEWBOX) gives threshold ≈ 1.114°.
+      var DIVIDER_SKIP_PX  = 3;   // screen-pixels at the outer rim before a divider is suppressed
+      var SVG_RENDER_PX    = 370; // rendered SVG width in screen-pixels
+      var SVG_VIEWBOX      = 420; // SVG viewBox width in SVG units
+      var MERGE_THRESHOLD_DEG = DIVIDER_SKIP_PX * 180 * SVG_VIEWBOX / (R * Math.PI * SVG_RENDER_PX);
+      // Display switches to scientific notation above this tile count (100 trillion).
+      var SCIENTIFIC_NOTATION_THRESHOLD = 1e14;
+      function tileColor(type) {
+        return type === 'win' ? '#d4d4d4' : '#1e1e1e';
+      }
+      function formatTileCount(n) {
+        if (n >= SCIENTIFIC_NOTATION_THRESHOLD) return n.toExponential(2);
+        return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      }
+
+      // Build render groups: consecutive same-type tiles are merged when at least one
+      // of the neighbouring tiles is "tiny" (outer arc < 3 screen-px).
+      var renderGroups = (function() {
+        var n = dl.length;
+        if (n === 0) return [];
+        var tiny = dl.map(function(t, i) { return (da[i].end - da[i].start) < MERGE_THRESHOLD_DEG; });
+        var groups = [];
+        var i = 0;
+        while (i < n) {
+          var type = dl[i].type;
+          var items = [i];
+          var j = i + 1;
+          while (j < n && dl[j].type === type && (tiny[j - 1] || tiny[j])) {
+            items.push(j);
+            j++;
+          }
+          groups.push({ items: items, startAngle: da[items[0]].start, endAngle: da[items[items.length - 1]].end, type: type });
+          i = j;
+        }
+        // Circular merge: if the last group and first group are same type with a tiny boundary, merge them.
+        if (groups.length >= 2) {
+          var first = groups[0], last = groups[groups.length - 1];
+          if (first.type === last.type && (tiny[last.items[last.items.length - 1]] || tiny[first.items[0]])) {
+            groups[0] = {
+              items: last.items.concat(first.items),
+              startAngle: last.startAngle,
+              endAngle: first.endAngle + 360, // wrap past 360° — slicePath() handles this via trig periodicity in polar()
+              type: first.type,
+            };
+            groups.splice(groups.length - 1, 1);
+          }
+        }
+        return groups;
+      })();
+
+      return (
+        <div
+          style={{
+            minHeight: '100vh', background: '#0f0f0f', color: '#e0e0e0',
+            fontFamily: "'Cinzel', serif",
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            padding: '14px 12px 38px',
+            cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default',
+            userSelect: 'none',
+          }}
+          onClick={handleInteract}
+        >
+          {/* Blurable main content */}
+          <div style={{
+            width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center',
+            filter: isOverlay ? 'blur(6px)' : 'none',
+            transition: 'filter .35s',
+            pointerEvents: isOverlay ? 'none' : 'auto',
+          }}>
+            {/* Header row with title, subtitle, and collection button */}
+            <div style={{ position: 'relative', width: '100%', maxWidth: '680px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '0' }}>
+              <h1 style={{
+                fontSize: 'clamp(1.25rem, 3.2vw, 1.72rem)', letterSpacing: '.28em',
+                color: '#D4AF37', margin: '0 0 4px', fontWeight: 700,
+                textShadow: '0 0 24px rgba(212,175,55,.22)',
+              }}>PICK 3 SLOP</h1>
+              <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#888', letterSpacing: '.32em', marginBottom: '12px' }}>
+                SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
+              </div>
+              <button
+                onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}
+                style={{
+                  position: 'absolute', top: '2px', right: '0',
+                  background: 'transparent', border: '1px solid #2a2a2a',
+                  color: '#888', padding: '4px 10px',
+                  fontSize: '.5rem', fontFamily: "'Cinzel', serif",
+                  letterSpacing: '.22em', cursor: 'pointer',
+                  transition: 'color .15s, border-color .15s',
+                }}
+                onMouseEnter={function(e) { e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.borderColor = '#D4AF37'; }}
+                onMouseLeave={function(e) { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
+              >
+                COLLECTION {seenBoons}/{totalBoons}
+              </button>
+            </div>
+
+            {/* Wheel */}
+            <div
+              style={{ position: 'relative', width: 385, height: 370 }}
+              onClick={handleWheelClick}
+              onKeyDown={handleWheelKeyDown}
+              role="button"
+              aria-label="Spin wheel"
+              tabIndex={phase === 'idle' ? 0 : -1}
+            >
+              {/* Right-side pointer */}
+              <div style={{
+                position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+                width: 0, height: 0,
+                borderTop: '8px solid transparent',
+                borderBottom: '8px solid transparent',
+                borderRight: '19px solid #666',
+                zIndex: 10,
+                filter: 'drop-shadow(-3px 0 5px rgba(150,150,150,.4))',
+              }} />
+
+              <svg width={370} height={370} viewBox="0 0 420 420" style={{
+                transform: 'rotate(' + wdeg + 'deg)',
+                transition: anim ? 'transform 3.4s cubic-bezier(0.14, 0.58, 0.08, 1.0)' : 'none',
+              }}>
+                <circle cx={CX} cy={CY} r={R + 5} fill="none" stroke="#2a2a2a" strokeWidth={2} />
+                {renderGroups.map(function(group, gi) {
+                  // Any tile in this group undergoing the flip animation? → render individually.
+                  var hasFlipped = group.items.some(function(idx) { return flippedMap[dl[idx].id] && dl[idx].type === 'win'; });
+                  if (hasFlipped) {
+                    return group.items.map(function(idx) {
+                      var t = dl[idx], a = da[idx];
+                      if (flippedMap[t.id] && t.type === 'win') {
+                        return (
+                          <g key={t.id}>
+                            <path d={slicePath(a.start, a.end)} fill="#1e1e1e" stroke="#0f0f0f" strokeWidth={1.5} />
+                            <path d={slicePath(a.start, a.end)} fill="#d4d4d4" stroke="#0f0f0f" strokeWidth={1.5} style={{ animation: 'edgeOvertake .55s ease both' }} />
+                          </g>
+                        );
+                      }
+                      return <path key={t.id} d={slicePath(a.start, a.end)} fill={tileColor(t.type)} stroke="#0f0f0f" strokeWidth={1.5} />;
+                    });
+                  }
+                  // Render entire merged group as a single path — no internal dividers.
+                  return (
+                    <path key={'g' + gi} d={slicePath(group.startAngle, group.endAngle)} fill={tileColor(group.type)} stroke="#0f0f0f" strokeWidth={1.5} />
+                  );
+                })}
+                <circle cx={CX} cy={CY} r={17} fill="#0f0f0f" stroke="#333" strokeWidth={2} />
+                <circle cx={CX} cy={CY} r={5.5} fill="#3a3a3a" />
+              </svg>
+
+              {/* Tile counter — static overlay (does not rotate with wheel), shown after 3rd growth */}
+              {gl >= 3 && (
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  pointerEvents: 'none', zIndex: 5,
+                  color: '#D4AF37',
+                  fontFamily: "'Cinzel', serif", fontWeight: '700',
+                  fontSize: 'clamp(1rem, 5vw, 2rem)',
+                  letterSpacing: '.06em', textAlign: 'center',
+                  textShadow: '0 1px 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9)',
+                  userSelect: 'none',
+                }}>
+                  {formatTileCount(tiles.length)}
+                </div>
+              )}
+            </div>
+
+            {/* Spin / hint */}
+            <div style={{ height: 45, display: 'flex', alignItems: 'center', marginTop: '4px' }}>
+              {phase === 'idle' && (
+                <button
+                  className="spin-btn"
+                  onPointerDown={function(e) { e.stopPropagation(); spin(); }}
+                  onClick={function(e) { e.stopPropagation(); }}
+                  style={{
+                    padding: '9px 42px', background: 'transparent',
+                    border: '2px solid #D4AF37', color: '#D4AF37',
+                    fontSize: '.82rem', fontFamily: "'Cinzel', serif",
+                    letterSpacing: '.4em', cursor: 'pointer',
+                    transition: 'background .15s, box-shadow .15s',
+                    boxShadow: '0 0 14px rgba(212,175,55,.1)',
+                    touchAction: 'manipulation',
+                  }}
+                >
+                  SPIN
+                </button>
+              )}
+              {(phase === 'spinning' || phase === 'reveal') && (
+                <span style={{ fontSize: '.62rem', letterSpacing: '.32em', color: '#aaa', animation: 'blink 1.3s infinite' }}>
+                  {phase === 'spinning' ? 'CLICK ANYWHERE TO RESOLVE' : 'CLICK TO CONTINUE'}
+                </span>
+              )}
+            </div>
+
+            {/* Boon stack */}
+            {displayBoonGroups.length > 0 && (
+              <div style={{
+                marginTop: '10px', width: '100%', maxWidth: '680px',
+                background: 'rgba(8,8,8,0.9)', border: '1px solid #1e1e1e',
+                borderRadius: '4px', padding: '8px 11px',
+              }}>
+                <div style={{ fontSize: '.5rem', letterSpacing: '.35em', color: '#888', marginBottom: '5px' }}>
+                  BOON STACK &mdash; DRAG TO REORDER | HOVER OR CLICK TO INSPECT
+                </div>
+                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                  {displayBoonGroups.map(function(b) {
+                    return (
+                      <BoonTag
+                        key={b.iid}
+                        b={b}
+                        shaking={shakingGroupKey !== null && (b.group || b.id) === shakingGroupKey}
+                        draggable={true}
+                        dropTarget={dragOverIid === b.iid}
+                        onPointerDown={function(e) { e.stopPropagation(); startDragBoon(e, b.iid); }}
+                        onPointerMove={moveDragBoon}
+                        onPointerUp={function(e) { e.stopPropagation(); endDragBoon(e); }}
+                        onPointerCancel={function(e) { e.stopPropagation(); cancelDragBoon(e); }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tile reveal — slides in from the right */}
+          {phase === 'reveal' && rtile && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 40, pointerEvents: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.65)',
+            }}>
+              <div style={{
+                animation: 'tileReveal .54s cubic-bezier(0.22, 1, 0.36, 1) both',
+                transformStyle: 'preserve-3d',
+              }}>
+                <svg width={310} height={260} overflow="visible">
+                  <g>
+                  {(rtile.baseType === 'lose' && rtile.type === 'win') ? (
+                    <>
+                      <path
+                        d={revealWedge(rtile.halfSpan)}
+                        fill="#242424"
+                        stroke="#555"
+                        strokeWidth={2}
+                      />
+                      <path
+                        d={revealWedge(rtile.halfSpan)}
+                        fill="#d4d4d4"
+                        stroke="#888"
+                        strokeWidth={2}
+                        style={{ animation: 'edgeOvertake .45s ease both' }}
+                      />
+                    </>
+                  ) : (
+                    <path
+                      d={revealWedge(rtile.halfSpan)}
+                      fill={rtile.type === 'win' ? '#d4d4d4' : '#242424'}
+                      stroke={rtile.type === 'win' ? '#888' : '#555'}
+                      strokeWidth={2}
+                    />
+                  )}
+                  <text
+                    x={160} y={132}
+                    textAnchor="middle" dominantBaseline="middle"
+                    fontFamily="'Cinzel', serif" fontWeight="700"
+                    fontSize={20} letterSpacing="3"
+                    fill={(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? '#d0d0d0' : (rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0')}
+                    style={(rtile.baseType === 'lose' && rtile.type === 'win' && revealFlip) ? { animation: 'rescueTextFade .2s ease' } : null}
+                  >
+                    {(rtile.baseType === 'lose' && rtile.type === 'win' && !revealFlip) ? 'x LOSE x' : (rtile.type === 'win' ? '* WIN *' : 'x LOSE x')}
+                  </text>
+                  </g>
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* Overlay: boon shop / game over */}
+          {isOverlay && (
+            <div
+              style={{
+                position: 'fixed', inset: 0, zIndex: 50,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(6,6,6,.82)',
+                padding: '14px', overflowY: 'auto',
+                animation: 'overlayIn .3s ease',
+              }}
+              onClick={function(e) { e.stopPropagation(); }}
+            >
+              {phase === 'boon_select' && (
+                <div style={{
+                  width: '100%', maxWidth: '700px',
+                  background: '#111', border: '1px solid #2a2a2a',
+                  borderRadius: '6px', padding: '18px 16px',
+                  animation: 'fu .3s ease',
+                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
+                }}>
+                  <div style={{ textAlign: 'center', fontSize: '.6rem', letterSpacing: '.36em', color: '#888', marginBottom: '12px' }}>
+                    CHOOSE A BOON
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
+                    <button
+                      onClick={function(e) { e.stopPropagation(); rerollChoices(); }}
+                      disabled={shopRerolls <= 0}
+                      style={{
+                        padding: '7px 14px',
+                        background: 'transparent',
+                        border: '1px solid ' + (shopRerolls > 0 ? '#D4AF37' : '#444'),
+                        color: shopRerolls > 0 ? '#D4AF37' : '#888',
+                        letterSpacing: '.18em',
+                        fontSize: '.56rem',
+                        cursor: shopRerolls > 0 ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      REROLL SHOP ({shopRerolls})
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {choices.map(function(b) {
+                      return (
+                        <div
+                          key={b.iid}
+                          className="boon-card"
+                          onClick={function(e) { e.stopPropagation(); pick(b); }}
+                          style={{
+                            border: '2px solid ' + RC[b.rarity],
+                            borderRadius: '4px', padding: '11px',
+                            width: '158px', cursor: 'pointer',
+                            background: RC[b.rarity] + '12',
+                            boxShadow: '0 0 10px ' + RC[b.rarity] + '28',
+                          }}
+                          onMouseEnter={function(e) { e.currentTarget.style.boxShadow = '0 0 24px ' + RC[b.rarity] + '58'; }}
+                          onMouseLeave={function(e) { e.currentTarget.style.boxShadow = '0 0 10px ' + RC[b.rarity] + '28'; }}
+                        >
+                          <div style={{ fontSize: '.52rem', color: RC[b.rarity], letterSpacing: '.3em', textTransform: 'uppercase', marginBottom: '5px' }}>
+                            {b.rarity}
+                          </div>
+                          <div style={{ fontSize: '.78rem', color: '#e0e0e0', marginBottom: '7px', fontWeight: '600', lineHeight: 1.2 }}>
+                            {b.name}
+                          </div>
+                          <div style={{ fontSize: '.62rem', color: '#888', lineHeight: '1.45', fontFamily: 'Georgia, serif' }}>
+                            {b.desc}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {phase === 'game_over' && (
+                <div style={{
+                  textAlign: 'center',
+                  background: '#111', border: '1px solid #2a2a2a',
+                  borderRadius: '6px', padding: '28px 30px',
+                  maxWidth: '500px', width: '100%',
+                  animation: 'fu .4s ease',
+                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
+                }}>
+                  <div style={{
+                    fontSize: 'clamp(1.35rem, 4.3vw, 2.1rem)', fontWeight: 700,
+                    color: '#CC1010', letterSpacing: '.22em',
+                    textShadow: '0 0 22px rgba(200,16,16,.5)',
+                    marginBottom: '6px',
+                  }}>
+                    ELIMINATED
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '.9rem', color: '#888', letterSpacing: '.35em', marginBottom: '20px' }}>
+                    {sc} SPINS SURVIVED
+                  </div>
+                  {shownBoons.length > 0 && (
+                    <div style={{ marginBottom: '20px' }}>
+                      <div style={{ fontSize: '.52rem', letterSpacing: '.38em', color: '#888', marginBottom: '8px' }}>
+                        FINAL BOON STACK
+                      </div>
+                      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {displayBoonGroups.map(function(b) {
+                          return <BoonTag key={'go_' + b.iid} b={b} large={true} />;
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    className="again-btn"
+                    onClick={function(e) { e.stopPropagation(); restart(); }}
+                    style={{
+                      padding: '10px 36px', background: 'transparent',
+                      border: '2px solid #D4AF37', color: '#D4AF37',
+                      fontSize: '.8rem', fontFamily: "'Cinzel', serif",
+                      letterSpacing: '.32em', cursor: 'pointer',
+                      transition: 'background .15s',
+                    }}
+                  >
+                    PLAY AGAIN
+                  </button>
+                  <button
+                    onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}
+                    style={{
+                      display: 'block', margin: '12px auto 0',
+                      padding: '7px 22px', background: 'transparent',
+                      border: '1px solid #2a2a2a', color: '#888',
+                      fontSize: '.6rem', fontFamily: "'Cinzel', serif",
+                      letterSpacing: '.28em', cursor: 'pointer',
+                      transition: 'color .15s, border-color .15s',
+                    }}
+                    onMouseEnter={function(e) { e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.borderColor = '#D4AF37'; }}
+                    onMouseLeave={function(e) { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
+                  >
+                    VIEW COLLECTION ({seenBoons}/{totalBoons})
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Wheel grows */}
+          {phase === 'growing' && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 100, pointerEvents: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(6,6,6,.92)',
+            }}>
+              <div style={{
+                fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', fontWeight: 700,
+                color: '#D4AF37', letterSpacing: '.3em',
+                border: '2px solid #D4AF37', padding: '22px 44px',
+                animation: 'zr .5s cubic-bezier(0.34, 1.56, 0.64, 1), growPulse 1s .5s infinite',
+              }}>
+                WHEEL GROWS
+              </div>
+            </div>
+          )}
+
+          {/* Collection modal */}
+          {showCollection && (
+            <div
+              style={{
+                position: 'fixed', inset: 0, zIndex: 200,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(6,6,6,.92)',
+                padding: '14px',
+                animation: 'overlayIn .3s ease',
+              }}
+              onClick={function() { setShowCollection(false); }}
+            >
+              <div
+                style={{
+                  width: '100%', maxWidth: '700px',
+                  background: '#111', border: '1px solid #2a2a2a',
+                  borderRadius: '6px', padding: '18px 16px',
+                  maxHeight: '85vh', overflowY: 'auto',
+                  animation: 'fu .3s ease',
+                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
+                }}
+                onClick={function(e) { e.stopPropagation(); }}
+              >
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                  <div>
+                    <div style={{ fontSize: '.6rem', letterSpacing: '.36em', color: '#888', marginBottom: '4px' }}>BOON COLLECTION</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#888', letterSpacing: '.2em' }}>
+                      {seenBoons} / {totalBoons} DISCOVERED
+                    </div>
+                  </div>
+                  <button
+                    onClick={function() { setShowCollection(false); }}
+                    style={{
+                      background: 'none', border: '1px solid #333', color: '#888',
+                      padding: '5px 12px', cursor: 'pointer',
+                      fontSize: '.6rem', letterSpacing: '.2em', fontFamily: "'Cinzel', serif",
+                    }}
+                  >
+                    CLOSE
+                  </button>
+                </div>
+
+                {/* Progress bar */}
+                <div style={{ height: '2px', background: '#1a1a1a', borderRadius: '1px', marginBottom: '14px' }}>
+                  <div style={{
+                    height: '100%',
+                    width: (totalBoons > 0 ? (seenBoons / totalBoons * 100) : 0) + '%',
+                    background: '#D4AF37', borderRadius: '1px', transition: 'width .4s',
+                  }} />
+                </div>
+
+                {/* Boon grid — sorted by rarity then name */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(128px, 1fr))', gap: '6px' }}>
+                  {(function() {
+                    var rarityOrder = ['common', 'uncommon', 'rare', 'legendary'];
+                    var sorted = BOONS.slice().sort(function(a, b) {
+                      var ri = rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity);
+                      if (ri !== 0) return ri;
+                      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+                    });
+                    return sorted.map(function(b) {
+                      var seen = collection.has(b.id);
+                      var c = RC[b.rarity];
+                      return (
+                        <div
+                          key={b.id}
+                          style={{
+                            border: '1px solid ' + (seen ? c + '88' : '#1c1c1c'),
+                            borderRadius: '3px',
+                            padding: '8px 9px',
+                            background: seen ? c + '0d' : '#080808',
+                          }}
+                        >
+                          <div style={{ fontSize: '.46rem', color: seen ? c : '#2a2a2a', letterSpacing: '.28em', textTransform: 'uppercase', marginBottom: '4px' }}>
+                            {b.rarity}
+                          </div>
+                          <div style={{ fontSize: '.64rem', color: seen ? '#ccc' : '#2a2a2a', fontFamily: "'Cinzel', serif", fontWeight: seen ? 600 : 400, lineHeight: 1.2 }}>
+                            {seen ? b.name : '???'}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
