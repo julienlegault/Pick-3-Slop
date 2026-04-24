@@ -554,6 +554,9 @@
         if (n >= SCIENTIFIC_NOTATION_THRESHOLD) return n.toExponential(2);
         return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
       }
+      function formatWinPct(frac) {
+        return (Math.round(frac * 1000) / 10) + '% WIN';
+      }
 
       // Build render groups: consecutive same-type tiles are merged when at least one
       // of the neighbouring tiles is "tiny" (outer arc < 3 screen-px).
@@ -616,7 +619,7 @@
               <div className="app-subtitle">
                 SPIN {sc} &nbsp;|&nbsp;
                   {probWinFrac !== null
-                    ? (Math.round(probWinFrac * 1000) / 10) + '% WIN'
+                    ? formatWinPct(probWinFrac)
                     : wins + ' / ' + totalTileCount + ' WIN'
                   } &nbsp;|&nbsp; LVL {gl}
               </div>
@@ -681,7 +684,7 @@
               {gl >= 3 && (
                 <div className="tile-counter">
                   {probWinFrac !== null
-                    ? (Math.round(probWinFrac * 1000) / 10) + '% WIN'
+                    ? formatWinPct(probWinFrac)
                     : formatTileCount(totalTileCount)
                   }
                 </div>

@@ -851,7 +851,7 @@
         Object.assign({}, winTile,  { sz: Math.max(0.02, winC  * wm * mergeMult) }),
         Object.assign({}, tiles.find(function(t) { return t.type === 'lose'; }), { sz: Math.max(0.02, loseC * lm) }),
       ];
-      if (tmp > 0) result.push({ id: '_vt', type: 'win', _virt: true, _count: tmp, sz: Math.max(0.02, tmp * wm), temp: true });
+      if (tmp > 0) result.push({ id: '_vt0', type: 'win', _virt: true, _count: tmp, sz: Math.max(0.02, tmp * wm), temp: true });
       return result;
     }
 
