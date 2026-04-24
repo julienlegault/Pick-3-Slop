@@ -59,10 +59,7 @@
       var startRef = useRef(null);
       var movedRef = useRef(false);
       var c = RC[b.rarity];
-      var sz = large
-        ? { padding: '4px 11px', fontSize: '.7rem' }
-        : { padding: '3px 8px',  fontSize: '.62rem' };
-      var cls = 'boon-tag' + (pinned ? ' pinned' : '') + (shaking ? ' shaking' : '');
+      var cls = 'boon-tag boon-tag-base ' + (large ? 'boon-tag-large' : 'boon-tag-small') + (pinned ? ' pinned' : '') + (shaking ? ' shaking' : '');
 
       return (
         <span
@@ -99,29 +96,26 @@
             }
             setPinned(function(p) { return !p; });
           }}
-          style={Object.assign({}, sz, {
+          style={{
             border: '1px solid ' + c,
-            borderRadius: '2px',
             color: c,
             background: pinned ? c + '28' : c + '14',
             cursor: draggable ? 'grab' : 'pointer',
-            transition: 'background .12s',
-            fontFamily: "'Cinzel', serif",
             outline: props.dropTarget ? ('1px dashed ' + c) : 'none',
-          })}
+          }}
         >
           {b.name}{b.charges > 0 ? ' (' + b.charges + ')' : ''}
           <span
             className="boon-tip"
             style={{ border: '1px solid ' + c, boxShadow: '0 4px 24px rgba(0,0,0,.8), 0 0 12px ' + c + '30' }}
           >
-            <span style={{ display:'block', fontSize:'.58rem', color:c, letterSpacing:'.3em', textTransform:'uppercase', marginBottom:'5px', fontFamily:"'Cinzel',serif" }}>
+            <span className="boon-tip-rarity" style={{ color: c }}>
               {b.rarity}
             </span>
-            <span style={{ display:'block', fontSize:'.82rem', color:'#e0e0e0', fontFamily:"'Cinzel',serif", fontWeight:600, marginBottom:'6px', lineHeight:1.25 }}>
+            <span className="boon-tip-name">
               {b.name}
             </span>
-            <span style={{ display:'block', fontSize:'.7rem', color:'#888', lineHeight:1.5, fontFamily:'Georgia,serif' }}>
+            <span className="boon-tip-desc">
               {b.desc}
             </span>
             <span className="tip-arrow" style={{ borderTop: '7px solid ' + c }} />
@@ -568,45 +562,21 @@
 
       return (
         <div
-          style={{
-            minHeight: '100vh', background: '#0f0f0f', color: '#e0e0e0',
-            fontFamily: "'Cinzel', serif",
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            padding: '14px 12px 38px',
-            cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default',
-            userSelect: 'none',
-          }}
+          className="app-root"
+          style={{ cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default' }}
           onClick={handleInteract}
         >
           {/* Blurable main content */}
-          <div style={{
-            width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center',
-            filter: isOverlay ? 'blur(6px)' : 'none',
-            transition: 'filter .35s',
-            pointerEvents: isOverlay ? 'none' : 'auto',
-          }}>
+          <div className={'app-main' + (isOverlay ? ' blurred' : '')}>
             {/* Header row with title, subtitle, and collection button */}
-            <div style={{ position: 'relative', width: '100%', maxWidth: '680px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '0' }}>
-              <h1 style={{
-                fontSize: 'clamp(1.25rem, 3.2vw, 1.72rem)', letterSpacing: '.28em',
-                color: '#D4AF37', margin: '0 0 4px', fontWeight: 700,
-                textShadow: '0 0 24px rgba(212,175,55,.22)',
-              }}>PICK 3 SLOP</h1>
-              <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#888', letterSpacing: '.32em', marginBottom: '12px' }}>
+            <div className="app-header">
+              <h1 className="app-title">PICK 3 SLOP</h1>
+              <div className="app-subtitle">
                 SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
               </div>
               <button
+                className="btn-collection"
                 onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}
-                style={{
-                  position: 'absolute', top: '2px', right: '0',
-                  background: 'transparent', border: '1px solid #2a2a2a',
-                  color: '#888', padding: '4px 10px',
-                  fontSize: '.5rem', fontFamily: "'Cinzel', serif",
-                  letterSpacing: '.22em', cursor: 'pointer',
-                  transition: 'color .15s, border-color .15s',
-                }}
-                onMouseEnter={function(e) { e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.borderColor = '#D4AF37'; }}
-                onMouseLeave={function(e) { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
               >
                 COLLECTION {seenBoons}/{totalBoons}
               </button>
@@ -614,7 +584,7 @@
 
             {/* Wheel */}
             <div
-              style={{ position: 'relative', width: 385, height: 370 }}
+              className="wheel-wrap"
               onClick={handleWheelClick}
               onKeyDown={handleWheelKeyDown}
               role="button"
@@ -622,15 +592,7 @@
               tabIndex={phase === 'idle' ? 0 : -1}
             >
               {/* Right-side pointer */}
-              <div style={{
-                position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
-                width: 0, height: 0,
-                borderTop: '8px solid transparent',
-                borderBottom: '8px solid transparent',
-                borderRight: '19px solid #666',
-                zIndex: 10,
-                filter: 'drop-shadow(-3px 0 5px rgba(150,150,150,.4))',
-              }} />
+              <div className="wheel-pointer" />
 
               <svg width={370} height={370} viewBox="0 0 420 420" style={{
                 transform: 'rotate(' + wdeg + 'deg)',
@@ -665,44 +627,25 @@
 
               {/* Tile counter — static overlay (does not rotate with wheel), shown after 3rd growth */}
               {gl >= 3 && (
-                <div style={{
-                  position: 'absolute', top: '50%', left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  pointerEvents: 'none', zIndex: 5,
-                  color: '#D4AF37',
-                  fontFamily: "'Cinzel', serif", fontWeight: '700',
-                  fontSize: 'clamp(1rem, 5vw, 2rem)',
-                  letterSpacing: '.06em', textAlign: 'center',
-                  textShadow: '0 1px 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9)',
-                  userSelect: 'none',
-                }}>
+                <div className="tile-counter">
                   {formatTileCount(tiles.length)}
                 </div>
               )}
             </div>
 
             {/* Spin / hint */}
-            <div style={{ height: 45, display: 'flex', alignItems: 'center', marginTop: '4px' }}>
+            <div className="spin-row">
               {phase === 'idle' && (
                 <button
                   className="spin-btn"
                   onPointerDown={function(e) { e.stopPropagation(); spin(); }}
                   onClick={function(e) { e.stopPropagation(); }}
-                  style={{
-                    padding: '9px 42px', background: 'transparent',
-                    border: '2px solid #D4AF37', color: '#D4AF37',
-                    fontSize: '.82rem', fontFamily: "'Cinzel', serif",
-                    letterSpacing: '.4em', cursor: 'pointer',
-                    transition: 'background .15s, box-shadow .15s',
-                    boxShadow: '0 0 14px rgba(212,175,55,.1)',
-                    touchAction: 'manipulation',
-                  }}
                 >
                   SPIN
                 </button>
               )}
               {(phase === 'spinning' || phase === 'reveal') && (
-                <span style={{ fontSize: '.62rem', letterSpacing: '.32em', color: '#aaa', animation: 'blink 1.3s infinite' }}>
+                <span className="phase-hint">
                   {phase === 'spinning' ? 'CLICK ANYWHERE TO RESOLVE' : 'CLICK TO CONTINUE'}
                 </span>
               )}
@@ -710,15 +653,11 @@
 
             {/* Boon stack */}
             {displayBoonGroups.length > 0 && (
-              <div style={{
-                marginTop: '10px', width: '100%', maxWidth: '680px',
-                background: 'rgba(8,8,8,0.9)', border: '1px solid #1e1e1e',
-                borderRadius: '4px', padding: '8px 11px',
-              }}>
-                <div style={{ fontSize: '.5rem', letterSpacing: '.35em', color: '#888', marginBottom: '5px' }}>
+              <div className="boon-stack">
+                <div className="boon-stack-label">
                   BOON STACK &mdash; DRAG TO REORDER | HOVER OR CLICK TO INSPECT
                 </div>
-                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                <div className="boon-stack-items">
                   {displayBoonGroups.map(function(b) {
                     return (
                       <BoonTag
@@ -741,15 +680,8 @@
 
           {/* Tile reveal — slides in from the right */}
           {phase === 'reveal' && rtile && (
-            <div style={{
-              position: 'fixed', inset: 0, zIndex: 40, pointerEvents: 'none',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(0,0,0,0.65)',
-            }}>
-              <div style={{
-                animation: 'tileReveal .54s cubic-bezier(0.22, 1, 0.36, 1) both',
-                transformStyle: 'preserve-3d',
-              }}>
+            <div className="reveal-overlay">
+              <div className="reveal-card">
                 <svg width={310} height={260} overflow="visible">
                   <g>
                   {(rtile.baseType === 'lose' && rtile.type === 'win') ? (
@@ -795,44 +727,29 @@
           {/* Overlay: boon shop / game over */}
           {isOverlay && (
             <div
-              style={{
-                position: 'fixed', inset: 0, zIndex: 50,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(6,6,6,.82)',
-                padding: '14px', overflowY: 'auto',
-                animation: 'overlayIn .3s ease',
-              }}
+              className="game-overlay"
               onClick={function(e) { e.stopPropagation(); }}
             >
               {phase === 'boon_select' && (
-                <div style={{
-                  width: '100%', maxWidth: '700px',
-                  background: '#111', border: '1px solid #2a2a2a',
-                  borderRadius: '6px', padding: '18px 16px',
-                  animation: 'fu .3s ease',
-                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
-                }}>
-                  <div style={{ textAlign: 'center', fontSize: '.6rem', letterSpacing: '.36em', color: '#888', marginBottom: '12px' }}>
+                <div className="shop-panel">
+                  <div className="shop-label">
                     CHOOSE A BOON
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
+                  <div className="reroll-row">
                     <button
                       onClick={function(e) { e.stopPropagation(); rerollChoices(); }}
                       disabled={shopRerolls <= 0}
+                      className="btn-reroll"
                       style={{
-                        padding: '7px 14px',
-                        background: 'transparent',
                         border: '1px solid ' + (shopRerolls > 0 ? '#D4AF37' : '#444'),
                         color: shopRerolls > 0 ? '#D4AF37' : '#888',
-                        letterSpacing: '.18em',
-                        fontSize: '.56rem',
                         cursor: shopRerolls > 0 ? 'pointer' : 'not-allowed',
                       }}
                     >
                       REROLL SHOP ({shopRerolls})
                     </button>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <div className="boon-choices">
                     {choices.map(function(b) {
                       return (
                         <div
@@ -841,21 +758,19 @@
                           onClick={function(e) { e.stopPropagation(); pick(b); }}
                           style={{
                             border: '2px solid ' + RC[b.rarity],
-                            borderRadius: '4px', padding: '11px',
-                            width: '158px', cursor: 'pointer',
                             background: RC[b.rarity] + '12',
                             boxShadow: '0 0 10px ' + RC[b.rarity] + '28',
                           }}
                           onMouseEnter={function(e) { e.currentTarget.style.boxShadow = '0 0 24px ' + RC[b.rarity] + '58'; }}
                           onMouseLeave={function(e) { e.currentTarget.style.boxShadow = '0 0 10px ' + RC[b.rarity] + '28'; }}
                         >
-                          <div style={{ fontSize: '.52rem', color: RC[b.rarity], letterSpacing: '.3em', textTransform: 'uppercase', marginBottom: '5px' }}>
+                          <div className="boon-card-rarity" style={{ color: RC[b.rarity] }}>
                             {b.rarity}
                           </div>
-                          <div style={{ fontSize: '.78rem', color: '#e0e0e0', marginBottom: '7px', fontWeight: '600', lineHeight: 1.2 }}>
+                          <div className="boon-card-name">
                             {b.name}
                           </div>
-                          <div style={{ fontSize: '.62rem', color: '#888', lineHeight: '1.45', fontFamily: 'Georgia, serif' }}>
+                          <div className="boon-card-desc">
                             {b.desc}
                           </div>
                         </div>
@@ -866,31 +781,19 @@
               )}
 
               {phase === 'game_over' && (
-                <div style={{
-                  textAlign: 'center',
-                  background: '#111', border: '1px solid #2a2a2a',
-                  borderRadius: '6px', padding: '28px 30px',
-                  maxWidth: '500px', width: '100%',
-                  animation: 'fu .4s ease',
-                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
-                }}>
-                  <div style={{
-                    fontSize: 'clamp(1.35rem, 4.3vw, 2.1rem)', fontWeight: 700,
-                    color: '#CC1010', letterSpacing: '.22em',
-                    textShadow: '0 0 22px rgba(200,16,16,.5)',
-                    marginBottom: '6px',
-                  }}>
+                <div className="game-over-panel">
+                  <div className="eliminated-text">
                     ELIMINATED
                   </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: '.9rem', color: '#888', letterSpacing: '.35em', marginBottom: '20px' }}>
+                  <div className="spins-survived">
                     {sc} SPINS SURVIVED
                   </div>
                   {shownBoons.length > 0 && (
-                    <div style={{ marginBottom: '20px' }}>
-                      <div style={{ fontSize: '.52rem', letterSpacing: '.38em', color: '#888', marginBottom: '8px' }}>
+                    <div className="final-boons">
+                      <div className="final-boons-label">
                         FINAL BOON STACK
                       </div>
-                      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <div className="final-boons-items">
                         {displayBoonGroups.map(function(b) {
                           return <BoonTag key={'go_' + b.iid} b={b} large={true} />;
                         })}
@@ -900,28 +803,12 @@
                   <button
                     className="again-btn"
                     onClick={function(e) { e.stopPropagation(); restart(); }}
-                    style={{
-                      padding: '10px 36px', background: 'transparent',
-                      border: '2px solid #D4AF37', color: '#D4AF37',
-                      fontSize: '.8rem', fontFamily: "'Cinzel', serif",
-                      letterSpacing: '.32em', cursor: 'pointer',
-                      transition: 'background .15s',
-                    }}
                   >
                     PLAY AGAIN
                   </button>
                   <button
+                    className="btn-view-collection"
                     onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}
-                    style={{
-                      display: 'block', margin: '12px auto 0',
-                      padding: '7px 22px', background: 'transparent',
-                      border: '1px solid #2a2a2a', color: '#888',
-                      fontSize: '.6rem', fontFamily: "'Cinzel', serif",
-                      letterSpacing: '.28em', cursor: 'pointer',
-                      transition: 'color .15s, border-color .15s',
-                    }}
-                    onMouseEnter={function(e) { e.currentTarget.style.color = '#D4AF37'; e.currentTarget.style.borderColor = '#D4AF37'; }}
-                    onMouseLeave={function(e) { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#2a2a2a'; }}
                   >
                     VIEW COLLECTION ({seenBoons}/{totalBoons})
                   </button>
@@ -932,17 +819,8 @@
 
           {/* Wheel grows */}
           {phase === 'growing' && (
-            <div style={{
-              position: 'fixed', inset: 0, zIndex: 100, pointerEvents: 'none',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(6,6,6,.92)',
-            }}>
-              <div style={{
-                fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', fontWeight: 700,
-                color: '#D4AF37', letterSpacing: '.3em',
-                border: '2px solid #D4AF37', padding: '22px 44px',
-                animation: 'zr .5s cubic-bezier(0.34, 1.56, 0.64, 1), growPulse 1s .5s infinite',
-              }}>
+            <div className="growing-overlay">
+              <div className="growing-text">
                 WHEEL GROWS
               </div>
             </div>
@@ -951,57 +829,38 @@
           {/* Collection modal */}
           {showCollection && (
             <div
-              style={{
-                position: 'fixed', inset: 0, zIndex: 200,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(6,6,6,.92)',
-                padding: '14px',
-                animation: 'overlayIn .3s ease',
-              }}
+              className="collection-overlay"
               onClick={function() { setShowCollection(false); }}
             >
               <div
-                style={{
-                  width: '100%', maxWidth: '700px',
-                  background: '#111', border: '1px solid #2a2a2a',
-                  borderRadius: '6px', padding: '18px 16px',
-                  maxHeight: '85vh', overflowY: 'auto',
-                  animation: 'fu .3s ease',
-                  boxShadow: '0 8px 48px rgba(0,0,0,.9)',
-                }}
+                className="collection-panel"
                 onClick={function(e) { e.stopPropagation(); }}
               >
                 {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <div className="collection-header">
                   <div>
-                    <div style={{ fontSize: '.6rem', letterSpacing: '.36em', color: '#888', marginBottom: '4px' }}>BOON COLLECTION</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: '.68rem', color: '#888', letterSpacing: '.2em' }}>
+                    <div className="collection-title">BOON COLLECTION</div>
+                    <div className="collection-count">
                       {seenBoons} / {totalBoons} DISCOVERED
                     </div>
                   </div>
                   <button
+                    className="btn-close"
                     onClick={function() { setShowCollection(false); }}
-                    style={{
-                      background: 'none', border: '1px solid #333', color: '#888',
-                      padding: '5px 12px', cursor: 'pointer',
-                      fontSize: '.6rem', letterSpacing: '.2em', fontFamily: "'Cinzel', serif",
-                    }}
                   >
                     CLOSE
                   </button>
                 </div>
 
                 {/* Progress bar */}
-                <div style={{ height: '2px', background: '#1a1a1a', borderRadius: '1px', marginBottom: '14px' }}>
-                  <div style={{
-                    height: '100%',
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{
                     width: (totalBoons > 0 ? (seenBoons / totalBoons * 100) : 0) + '%',
-                    background: '#D4AF37', borderRadius: '1px', transition: 'width .4s',
                   }} />
                 </div>
 
                 {/* Boon grid — sorted by rarity then name */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(128px, 1fr))', gap: '6px' }}>
+                <div className="boon-grid">
                   {(function() {
                     var rarityOrder = ['common', 'uncommon', 'rare', 'legendary'];
                     var sorted = BOONS.slice().sort(function(a, b) {
@@ -1015,17 +874,16 @@
                       return (
                         <div
                           key={b.id}
+                          className="boon-grid-item"
                           style={{
                             border: '1px solid ' + (seen ? c + '88' : '#1c1c1c'),
-                            borderRadius: '3px',
-                            padding: '8px 9px',
                             background: seen ? c + '0d' : '#080808',
                           }}
                         >
-                          <div style={{ fontSize: '.46rem', color: seen ? c : '#2a2a2a', letterSpacing: '.28em', textTransform: 'uppercase', marginBottom: '4px' }}>
+                          <div className="boon-grid-rarity" style={{ color: seen ? c : '#2a2a2a' }}>
                             {b.rarity}
                           </div>
-                          <div style={{ fontSize: '.64rem', color: seen ? '#ccc' : '#2a2a2a', fontFamily: "'Cinzel', serif", fontWeight: seen ? 600 : 400, lineHeight: 1.2 }}>
+                          <div className="boon-grid-name" style={{ color: seen ? '#ccc' : '#2a2a2a', fontWeight: seen ? 600 : 400 }}>
                             {seen ? b.name : '???'}
                           </div>
                         </div>
