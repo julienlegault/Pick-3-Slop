@@ -149,6 +149,7 @@
       var _s17 = useState(0);          var nonCommonPickStreak = _s17[0]; var setNonCommonPickStreak = _s17[1];
       var _s18 = useState(loadCollection); var collection = _s18[0]; var setCollection = _s18[1];
       var _s19 = useState(false);      var showCollection = _s19[0]; var setShowCollection = _s19[1];
+      var _s20 = useState(false);      var showMenu = _s20[0]; var setShowMenu = _s20[1];
 
       var spinRef = useRef(null);
       var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null), t4 = useRef([]);
@@ -409,6 +410,21 @@
         setChoices([]); setNid(6); setShopsSeen(0); setNonCommonPickStreak(0);
       }, []);
 
+      var giveUp = useCallback(function() {
+        [t1, t2, t3, spinGuardTimeoutRef].forEach(function(r) { clearTimeout(r.current); });
+        t4.current.forEach(function(tid) { clearTimeout(tid); });
+        t4.current = [];
+        doneRef.current = true;
+        revDone.current = true;
+        spinRef.current = null;
+        setAnim(false);
+        setShakingBoon(null);
+        setRevealFlip(false);
+        clearRunState();
+        setShowMenu(false);
+        setPhase('game_over');
+      }, []);
+
       var shownBoons = boons.filter(function(b) { return b.effect !== 'add_win'; });
       var flippedMap = {};
       flippedTiles.forEach(function(id) { flippedMap[id] = true; });
@@ -566,20 +582,25 @@
           style={{ cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default' }}
           onClick={handleInteract}
         >
+          {/* Menu button — fixed top-left, outside blurred area */}
+          {phase !== 'game_over' && (
+            <button
+              className="btn-menu"
+              onClick={function(e) { e.stopPropagation(); setShowMenu(true); }}
+              aria-label="Open menu"
+            >
+              &#8801;
+            </button>
+          )}
+
           {/* Blurable main content */}
           <div className={'app-main' + (isOverlay ? ' blurred' : '')}>
-            {/* Header row with title, subtitle, and collection button */}
+            {/* Header row with title and subtitle */}
             <div className="app-header">
               <h1 className="app-title">PICK 3 SLOP</h1>
               <div className="app-subtitle">
                 SPIN {sc} &nbsp;|&nbsp; {wins} / {tiles.length} WIN &nbsp;|&nbsp; LVL {gl}
               </div>
-              <button
-                className="btn-collection"
-                onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}
-              >
-                COLLECTION {seenBoons}/{totalBoons}
-              </button>
             </div>
 
             {/* Wheel */}
@@ -891,6 +912,38 @@
                     });
                   })()}
                 </div>
+              </div>
+            </div>
+          )}
+          {/* Menu modal */}
+          {showMenu && (
+            <div
+              className="menu-overlay"
+              onClick={function(e) { e.stopPropagation(); setShowMenu(false); }}
+            >
+              <div
+                className="menu-panel"
+                onClick={function(e) { e.stopPropagation(); }}
+              >
+                <div className="menu-title">MENU</div>
+                <button
+                  className="menu-btn menu-btn-giveup"
+                  onClick={function(e) { e.stopPropagation(); giveUp(); }}
+                >
+                  GIVE UP
+                </button>
+                <button
+                  className="menu-btn menu-btn-collection"
+                  onClick={function(e) { e.stopPropagation(); setShowMenu(false); setShowCollection(true); }}
+                >
+                  COLLECTION ({seenBoons}/{totalBoons})
+                </button>
+                <button
+                  className="menu-btn-close"
+                  onClick={function(e) { e.stopPropagation(); setShowMenu(false); }}
+                >
+                  CLOSE
+                </button>
               </div>
             </div>
           )}
