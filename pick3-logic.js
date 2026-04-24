@@ -66,6 +66,15 @@
     return Math.random() < DOOM_CHANCES[i];
   }
 
+  // Return the index of the first lose tile in a layout, or -1 if none exists.
+  // Used by callers to redirect a doom-forced spin to the lose sector.
+  function findLoseIndex(layout) {
+    for (var li = 0; li < layout.length; li++) {
+      if (layout[li].type === 'lose') return li;
+    }
+    return -1;
+  }
+
   // ── Virtual-tile helpers ─────────────────────────────────────────────────
   // At FULL_PROB_THRESHOLD the tile array collapses to exactly two entries
   // (one win, one lose), each carrying a _count representing how many
@@ -1258,6 +1267,7 @@
     calcAngles: calcAngles,
     pickWeighted: pickWeighted,
     tryDoom: tryDoom,
+    findLoseIndex: findLoseIndex,
     drawBoons: drawBoons,
     getShopRerolls: getShopRerolls,
     rerollShop: rerollShop,

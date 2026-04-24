@@ -13,6 +13,7 @@
     var buildLayout = window.Pick3Logic.buildLayout;
     var pickWeighted = window.Pick3Logic.pickWeighted;
     var tryDoom = window.Pick3Logic.tryDoom;
+    var findLoseIndex = window.Pick3Logic.findLoseIndex;
     var drawBoons = window.Pick3Logic.drawBoons;
     var tryRescue = window.Pick3Logic.tryRescue;
     var enforceMinimumLoseAreaAfterSpin = window.Pick3Logic.enforceMinimumLoseAreaAfterSpin;
@@ -265,10 +266,7 @@
         var doomed = tryDoom(gl);
         var idx;
         if (doomed) {
-          idx = -1;
-          for (var di = 0; di < layout.length; di++) {
-            if (layout[di].type === 'lose') { idx = di; break; }
-          }
+          idx = findLoseIndex(layout);
           if (idx < 0) { doomed = false; idx = pickWeighted(layout); }
         } else {
           idx = pickWeighted(layout);

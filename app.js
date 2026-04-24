@@ -4,7 +4,7 @@
         PROB_DISPLAY_THRESHOLD, FULL_PROB_THRESHOLD,
         isVirtWheel, virtGetCount, virtTotalCount,
         slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
-        pickWeighted, tryDoom, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
+        pickWeighted, tryDoom, findLoseIndex, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
         getStackedDesc, instantiateTemplate,
       } = window.Pick3Logic;
 
@@ -252,10 +252,7 @@
         var idx;
         if (doomed) {
           // Doom: force the wheel to land on the lose sector (visual is consistent).
-          idx = -1;
-          for (var di = 0; di < layout.length; di++) {
-            if (layout[di].type === 'lose') { idx = di; break; }
-          }
+          idx = findLoseIndex(layout);
           if (idx < 0) { doomed = false; idx = pickWeighted(layout); }
         } else {
           idx = pickWeighted(layout);
