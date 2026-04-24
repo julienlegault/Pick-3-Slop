@@ -43,12 +43,403 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   to { opacity: 1; }
 }
 
+/* ── App shell ───────────────────────────────────────────────────────── */
+.app-root {
+  min-height: 100vh;
+  background: #0f0f0f;
+  color: #e0e0e0;
+  font-family: 'Cinzel', serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 12px 38px;
+  user-select: none;
+}
+.app-main {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: filter .35s;
+}
+.app-main.blurred {
+  filter: blur(6px);
+  pointer-events: none;
+}
+.app-header {
+  position: relative;
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 0;
+}
+.app-title {
+  font-size: clamp(1.25rem, 3.2vw, 1.72rem);
+  letter-spacing: .28em;
+  color: #D4AF37;
+  margin: 0 0 4px;
+  font-weight: 700;
+  text-shadow: 0 0 24px rgba(212,175,55,.22);
+}
+.app-subtitle {
+  font-family: monospace;
+  font-size: .68rem;
+  color: #888;
+  letter-spacing: .32em;
+  margin-bottom: 12px;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.btn-collection {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  background: transparent;
+  border: 1px solid #2a2a2a;
+  color: #888;
+  padding: 4px 10px;
+  font-size: .5rem;
+  font-family: 'Cinzel', serif;
+  letter-spacing: .22em;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.btn-collection:hover { color: #D4AF37; border-color: #D4AF37; }
+
+.spin-btn {
+  padding: 9px 42px;
+  background: transparent;
+  border: 2px solid #D4AF37;
+  color: #D4AF37;
+  font-size: .82rem;
+  font-family: 'Cinzel', serif;
+  letter-spacing: .4em;
+  cursor: pointer;
+  transition: background .15s, box-shadow .15s;
+  box-shadow: 0 0 14px rgba(212,175,55,.1);
+  touch-action: manipulation;
+}
 .spin-btn:hover   { background: rgba(212,175,55,.1) !important; box-shadow: 0 0 26px rgba(212,175,55,.3) !important; }
+
+.again-btn {
+  padding: 10px 36px;
+  background: transparent;
+  border: 2px solid #D4AF37;
+  color: #D4AF37;
+  font-size: .8rem;
+  font-family: 'Cinzel', serif;
+  letter-spacing: .32em;
+  cursor: pointer;
+  transition: background .15s;
+}
 .again-btn:hover  { background: rgba(212,175,55,.1) !important; }
-.boon-card        { transition: transform .15s, box-shadow .15s !important; }
+
+.btn-reroll {
+  padding: 7px 14px;
+  background: transparent;
+  letter-spacing: .18em;
+  font-size: .56rem;
+}
+.btn-view-collection {
+  display: block;
+  margin: 12px auto 0;
+  padding: 7px 22px;
+  background: transparent;
+  border: 1px solid #2a2a2a;
+  color: #888;
+  font-size: .6rem;
+  font-family: 'Cinzel', serif;
+  letter-spacing: .28em;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.btn-view-collection:hover { color: #D4AF37; border-color: #D4AF37; }
+
+.btn-close {
+  background: none;
+  border: 1px solid #333;
+  color: #888;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: .6rem;
+  letter-spacing: .2em;
+  font-family: 'Cinzel', serif;
+}
+
+/* ── Wheel ────────────────────────────────────────────────────────────── */
+.wheel-wrap {
+  position: relative;
+  width: 385px;
+  height: 370px;
+}
+.wheel-pointer {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 19px solid #666;
+  z-index: 10;
+  filter: drop-shadow(-3px 0 5px rgba(150,150,150,.4));
+}
+.tile-counter {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 5;
+  color: #D4AF37;
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  font-size: clamp(1rem, 5vw, 2rem);
+  letter-spacing: .06em;
+  text-align: center;
+  text-shadow: 0 1px 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9);
+  user-select: none;
+}
+
+/* ── Spin row ─────────────────────────────────────────────────────────── */
+.spin-row {
+  height: 45px;
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+}
+.phase-hint {
+  font-size: .62rem;
+  letter-spacing: .32em;
+  color: #aaa;
+  animation: blink 1.3s infinite;
+}
+
+/* ── Boon stack ───────────────────────────────────────────────────────── */
+.boon-stack {
+  margin-top: 10px;
+  width: 100%;
+  max-width: 680px;
+  background: rgba(8,8,8,0.9);
+  border: 1px solid #1e1e1e;
+  border-radius: 4px;
+  padding: 8px 11px;
+}
+.boon-stack-label {
+  font-size: .5rem;
+  letter-spacing: .35em;
+  color: #888;
+  margin-bottom: 5px;
+}
+.boon-stack-items {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+/* ── Tile reveal ──────────────────────────────────────────────────────── */
+.reveal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.65);
+}
+.reveal-card {
+  animation: tileReveal .54s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-style: preserve-3d;
+}
+
+/* ── Overlays ─────────────────────────────────────────────────────────── */
+.game-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6,6,6,.82);
+  padding: 14px;
+  overflow-y: auto;
+  animation: overlayIn .3s ease;
+}
+.growing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6,6,6,.92);
+}
+.collection-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6,6,6,.92);
+  padding: 14px;
+  animation: overlayIn .3s ease;
+}
+
+/* ── Panels ───────────────────────────────────────────────────────────── */
+.shop-panel {
+  width: 100%;
+  max-width: 700px;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 18px 16px;
+  animation: fu .3s ease;
+  box-shadow: 0 8px 48px rgba(0,0,0,.9);
+}
+.shop-label {
+  text-align: center;
+  font-size: .6rem;
+  letter-spacing: .36em;
+  color: #888;
+  margin-bottom: 12px;
+}
+.reroll-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.boon-choices {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ── Boon cards (shop) ────────────────────────────────────────────────── */
+.boon-card {
+  border-radius: 4px;
+  padding: 11px;
+  width: 158px;
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s !important;
+}
 .boon-card:hover  { transform: translateY(-4px) !important; }
+.boon-card-rarity {
+  font-size: .52rem;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.boon-card-name {
+  font-size: .78rem;
+  color: #e0e0e0;
+  margin-bottom: 7px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.boon-card-desc {
+  font-size: .62rem;
+  color: #888;
+  line-height: 1.45;
+  font-family: Georgia, serif;
+}
+
+/* ── Game over panel ──────────────────────────────────────────────────── */
+.game-over-panel {
+  text-align: center;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 28px 30px;
+  max-width: 500px;
+  width: 100%;
+  animation: fu .4s ease;
+  box-shadow: 0 8px 48px rgba(0,0,0,.9);
+}
+.eliminated-text {
+  font-size: clamp(1.35rem, 4.3vw, 2.1rem);
+  font-weight: 700;
+  color: #CC1010;
+  letter-spacing: .22em;
+  text-shadow: 0 0 22px rgba(200,16,16,.5);
+  margin-bottom: 6px;
+}
+.spins-survived {
+  font-family: monospace;
+  font-size: .9rem;
+  color: #888;
+  letter-spacing: .35em;
+  margin-bottom: 20px;
+}
+.final-boons        { margin-bottom: 20px; }
+.final-boons-label  { font-size: .52rem; letter-spacing: .38em; color: #888; margin-bottom: 8px; }
+.final-boons-items  { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; }
+
+/* ── Growing banner ───────────────────────────────────────────────────── */
+.growing-text {
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  font-weight: 700;
+  color: #D4AF37;
+  letter-spacing: .3em;
+  border: 2px solid #D4AF37;
+  padding: 22px 44px;
+  animation: zr .5s cubic-bezier(0.34, 1.56, 0.64, 1), growPulse 1s .5s infinite;
+}
+
+/* ── Collection modal ─────────────────────────────────────────────────── */
+.collection-panel {
+  width: 100%;
+  max-width: 700px;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 18px 16px;
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: fu .3s ease;
+  box-shadow: 0 8px 48px rgba(0,0,0,.9);
+}
+.collection-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.collection-title { font-size: .6rem; letter-spacing: .36em; color: #888; margin-bottom: 4px; }
+.collection-count { font-family: monospace; font-size: .68rem; color: #888; letter-spacing: .2em; }
+.progress-bar {
+  height: 2px;
+  background: #1a1a1a;
+  border-radius: 1px;
+  margin-bottom: 14px;
+}
+.progress-fill {
+  height: 100%;
+  background: #D4AF37;
+  border-radius: 1px;
+  transition: width .4s;
+}
+.boon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 6px;
+}
+.boon-grid-item  { border-radius: 3px; padding: 8px 9px; }
+.boon-grid-rarity { font-size: .46rem; letter-spacing: .28em; text-transform: uppercase; margin-bottom: 4px; }
+.boon-grid-name  { font-size: .64rem; font-family: 'Cinzel', serif; line-height: 1.2; }
+
+/* ── BoonTag ──────────────────────────────────────────────────────────── */
 .boon-tag         { position: relative; display: inline-block; touch-action: none; }
 .boon-tag.shaking { animation: boonShake .22s ease-in-out 2; }
+.boon-tag-base    { border-radius: 2px; transition: background .12s; font-family: 'Cinzel', serif; }
+.boon-tag-large   { padding: 4px 11px; font-size: .7rem; }
+.boon-tag-small   { padding: 3px 8px;  font-size: .62rem; }
 .boon-tip         {
   display: none;
   position: absolute;
@@ -65,6 +456,30 @@ html, body { min-height: 100vh; background: #0f0f0f; }
 }
 .boon-tag:hover .boon-tip,
 .boon-tag.pinned .boon-tip { display: block; }
+.boon-tip-rarity {
+  display: block;
+  font-size: .58rem;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+  font-family: 'Cinzel', serif;
+}
+.boon-tip-name {
+  display: block;
+  font-size: .82rem;
+  color: #e0e0e0;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  margin-bottom: 6px;
+  line-height: 1.25;
+}
+.boon-tip-desc {
+  display: block;
+  font-size: .7rem;
+  color: #888;
+  line-height: 1.5;
+  font-family: Georgia, serif;
+}
 .tip-arrow {
   position: absolute;
   bottom: -7px;
