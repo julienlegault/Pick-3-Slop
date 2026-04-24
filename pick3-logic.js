@@ -37,6 +37,12 @@
   // At gl >= FULL_PROB_THRESHOLD the internal tile array is replaced by two virtual tiles,
   // trading per-tile bookkeeping for a compact win/lose count pair.
   var FULL_PROB_THRESHOLD = 6;
+  // At gl >= DOOM_THRESHOLD a hidden per-spin forced-loss roll kicks in, bypassing rescue.
+  // This ensures even the luckiest runs eventually end without feeling contrived.
+  // DOOM_CHANCES[i] is the probability for growthLevel = DOOM_THRESHOLD + i (last entry is used for all higher levels).
+  var DOOM_THRESHOLD = FULL_PROB_THRESHOLD;
+  var DOOM_CHANCES = [0.005, 0.010, 0.015, 0.020, 0.025];
+  // gl=6: 0.5 %, gl=7: 1.0 %, gl=8: 1.5 %, gl=9: 2.0 %, gl≥10: 2.5 %
 
   function rarityMult(rarity, gl) {
     var arr = RARITY_SCALE[rarity] || [1];
@@ -48,6 +54,26 @@
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
   function pct(v) { return Math.round(v * 100); }
   function makeIid(id) { return id + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+
+  // ── Doom system ──────────────────────────────────────────────────────────────
+  // At gl >= DOOM_THRESHOLD a hidden forced-loss roll is applied before the normal
+  // spin result.  When it fires the spin ends as a loss and rescue boons are
+  // bypassed, ensuring even the luckiest players eventually run out of luck.
+  // The probability is intentionally small so no individual loss feels contrived.
+  function tryDoom(growthLevel) {
+    if (growthLevel < DOOM_THRESHOLD) return false;
+    var i = Math.min(growthLevel - DOOM_THRESHOLD, DOOM_CHANCES.length - 1);
+    return Math.random() < DOOM_CHANCES[i];
+  }
+
+  // Return the index of the first lose tile in a layout, or -1 if none exists.
+  // Used by callers to redirect a doom-forced spin to the lose sector.
+  function findLoseIndex(layout) {
+    for (var li = 0; li < layout.length; li++) {
+      if (layout[li].type === 'lose') return li;
+    }
+    return -1;
+  }
 
   // ── Virtual-tile helpers ─────────────────────────────────────────────────
   // At FULL_PROB_THRESHOLD the tile array collapses to exactly two entries
@@ -1227,6 +1253,8 @@
     INIT_TILES: INIT_TILES,
     PROB_DISPLAY_THRESHOLD: PROB_DISPLAY_THRESHOLD,
     FULL_PROB_THRESHOLD: FULL_PROB_THRESHOLD,
+    DOOM_THRESHOLD: DOOM_THRESHOLD,
+    DOOM_CHANCES: DOOM_CHANCES,
     isVirtWheel: isVirtWheel,
     virtGetCount: virtGetCount,
     virtTotalCount: virtTotalCount,
@@ -1238,6 +1266,8 @@
     buildLayout: buildLayout,
     calcAngles: calcAngles,
     pickWeighted: pickWeighted,
+    tryDoom: tryDoom,
+    findLoseIndex: findLoseIndex,
     drawBoons: drawBoons,
     getShopRerolls: getShopRerolls,
     rerollShop: rerollShop,

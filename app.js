@@ -4,7 +4,7 @@
         PROB_DISPLAY_THRESHOLD, FULL_PROB_THRESHOLD,
         isVirtWheel, virtGetCount, virtTotalCount,
         slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
-        pickWeighted, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
+        pickWeighted, tryDoom, findLoseIndex, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
         getStackedDesc, instantiateTemplate,
       } = window.Pick3Logic;
 
@@ -248,7 +248,15 @@
         setTiles(spinTiles);
         var layout = buildLayout(spinTiles, spinBoons, true);
         var angles = calcAngles(layout);
-        var idx    = pickWeighted(layout);
+        var doomed = tryDoom(gl);
+        var idx;
+        if (doomed) {
+          // Doom: force the wheel to land on the lose sector (visual is consistent).
+          idx = findLoseIndex(layout);
+          if (idx < 0) { doomed = false; idx = pickWeighted(layout); }
+        } else {
+          idx = pickWeighted(layout);
+        }
         var tc     = angles[idx].center;
         var hs     = (angles[idx].end - angles[idx].start) / 2;
         var cm     = wdeg % 360;
@@ -257,7 +265,7 @@
 
         var landed = layout[idx].type;
         var result = landed, fb = spinBoons, triggered = [];
-        if (landed === 'lose') {
+        if (landed === 'lose' && !doomed) {
           var res = tryRescue(spinBoons);
           result = res.ok ? 'win' : 'lose';
           fb = res.boons;
