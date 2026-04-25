@@ -50,13 +50,15 @@
 
   // ── Boon-based doom system (endless mode) ────────────────────────────────────
   // Each doom boon has a per-spin chance of immediate loss.
-  // Value-based boons: doom% = 10% of the boon's primary ratio value.
-  // Count/other boons: flat 10%.
+  // Value-based boons (randomValue: true): doom% = 10% of the boon's primary ratio value.
+  // Count/other boons (randomValue absent or count-based): flat 10%.
   function calcBoonDoomChance(boon) {
+    // randomValue is explicitly set to true only for boons with randomized numeric values;
+    // it is absent (undefined) for fixed-value boons, making the falsy check correct here.
     if (!boon.randomValue || !boon.valueKeys || !boon.valueKeys.length) return 0.10;
     var primaryKey = boon.valueKeys[0];
     var val = boonNumeric(boon, primaryKey);
-    // If primary value is a ratio between 0 and 1, doom = 10% of that ratio.
+    // Ratio-based values are between 0 and 1; count-based (charges, tile amounts) are >= 1.
     if (typeof val === 'number' && val > 0 && val < 1) return val * 0.10;
     return 0.10;
   }
