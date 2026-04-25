@@ -632,7 +632,6 @@
 
       var startDragBoon = useCallback(function(e, iid) {
         if (phase !== 'idle') return;
-        e.preventDefault();
         if (e.currentTarget && e.currentTarget.setPointerCapture) {
           e.currentTarget.setPointerCapture(e.pointerId);
         }
@@ -644,7 +643,6 @@
 
       var moveDragBoon = useCallback(function(e) {
         if (!dragIid) return;
-        e.preventDefault();
         var target = document.elementFromPoint(e.clientX, e.clientY);
         var holder = target ? target.closest('[data-boon-iid]') : null;
         var overIid = holder ? holder.getAttribute('data-boon-iid') : null;
