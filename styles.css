@@ -409,6 +409,124 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   padding: 22px 44px;
   animation: zr .5s cubic-bezier(0.34, 1.56, 0.64, 1), growPulse 1s .5s infinite;
 }
+.victory-grow-text {
+  color: #ffffff;
+  border-color: #ffffff;
+  text-shadow: 0 0 32px rgba(255,255,255,.5);
+  box-shadow: 0 0 40px rgba(255,255,255,.15);
+  animation: zr .5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.doom-approaches-text {
+  color: #CC1010;
+  border-color: #CC1010;
+  text-shadow: 0 0 22px rgba(200,16,16,.6);
+  box-shadow: 0 0 40px rgba(200,16,16,.2);
+  font-size: clamp(1.1rem, 3vw, 1.7rem);
+  padding: 22px 32px;
+  animation: zr .5s cubic-bezier(0.34, 1.56, 0.64, 1), doomPulse 1s .5s infinite;
+}
+@keyframes doomPulse {
+  0%,100% { box-shadow: 0 0 18px rgba(180,16,16,.2); }
+  50%      { box-shadow: 0 0 52px rgba(180,16,16,.6), 0 0 90px rgba(180,16,16,.2); }
+}
+
+/* ── Victory panel ────────────────────────────────────────────────────── */
+.victory-panel {
+  text-align: center;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 28px 30px;
+  max-width: 560px;
+  width: 100%;
+  animation: fu .4s ease;
+  box-shadow: 0 8px 48px rgba(0,0,0,.9);
+}
+.victory-title {
+  font-size: clamp(1.35rem, 4.3vw, 2.1rem);
+  font-weight: 700;
+  color: #D4AF37;
+  letter-spacing: .22em;
+  text-shadow: 0 0 22px rgba(212,175,55,.5);
+  margin-bottom: 6px;
+}
+.victory-btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+.victory-btn {
+  padding: 10px 22px;
+  background: transparent;
+  font-family: 'Cinzel', serif;
+  font-size: .72rem;
+  letter-spacing: .3em;
+  cursor: pointer;
+  transition: background .15s;
+  border-radius: 2px;
+}
+.victory-btn-endless {
+  border: 2px solid #D4AF37;
+  color: #D4AF37;
+}
+.victory-btn-endless:hover { background: rgba(212,175,55,.12) !important; }
+.victory-btn-collection {
+  border: 1px solid #2a2a2a;
+  color: #888;
+}
+.victory-btn-collection:hover { color: #D4AF37; border-color: #D4AF37; }
+.victory-btn-restart {
+  border: 1px solid #662020;
+  color: #CC4444;
+}
+.victory-btn-restart:hover { background: rgba(180,40,40,.14) !important; }
+
+/* ── Doom reveal overlay ─────────────────────────────────────────────── */
+.doom-reveal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6,6,6,.92);
+  pointer-events: none;
+}
+.doom-reveal-boon {
+  position: relative;
+  text-align: center;
+  animation: zr .5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.doom-reveal-original {
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: .18em;
+  padding: 26px 52px;
+  border: 2px solid #888;
+  color: #e0e0e0;
+}
+.doom-reveal-doom {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: .18em;
+  color: #CC1010;
+  border: 2px solid #CC1010;
+  text-shadow: 0 0 22px rgba(200,16,16,.6);
+  box-shadow: 0 0 40px rgba(200,16,16,.2);
+  animation: doomOvertake .55s ease 1.5s both;
+}
+@keyframes doomOvertake {
+  0%   { opacity: 0; filter: blur(4px); transform: scale(1.3); }
+  45%  { opacity: .9; filter: blur(1px); transform: scale(1.04); }
+  100% { opacity: 1; filter: blur(0);   transform: scale(1); }
+}
 
 /* ── Collection modal ─────────────────────────────────────────────────── */
 .collection-panel {

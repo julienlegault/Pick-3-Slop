@@ -4,7 +4,7 @@
         PROB_DISPLAY_THRESHOLD, FULL_PROB_THRESHOLD,
         isVirtWheel, virtGetCount, virtTotalCount,
         slicePath, revealWedge, prepareSpin, buildLayout, calcAngles,
-        pickWeighted, tryDoom, findLoseIndex, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
+        pickWeighted, findLoseIndex, calcBoonDoomChance, calcGroupDoomChance, drawBoons, getShopRerolls, rerollShop, tryRescue, enforceMinimumLoseAreaAfterSpin, applyBoon,
         getStackedDesc, instantiateTemplate,
       } = window.Pick3Logic;
 
@@ -60,8 +60,9 @@
       var [pinned, setPinned] = useState(false);
       var startRef = useRef(null);
       var movedRef = useRef(false);
-      var c = RC[b.rarity];
-      var cls = 'boon-tag boon-tag-base ' + (large ? 'boon-tag-large' : 'boon-tag-small') + (pinned ? ' pinned' : '') + (shaking ? ' shaking' : '');
+      var isDoom = b.isDoom;
+      var c = isDoom ? '#CC1010' : RC[b.rarity];
+      var cls = 'boon-tag boon-tag-base ' + (large ? 'boon-tag-large' : 'boon-tag-small') + (pinned ? ' pinned' : '') + (shaking ? ' shaking' : '') + (isDoom ? ' doom-boon-tag' : '');
 
       return (
         <span
@@ -101,7 +102,7 @@
           style={{
             border: '1px solid ' + c,
             color: c,
-            background: pinned ? c + '28' : c + '14',
+            background: isDoom ? (pinned ? 'rgba(180,16,16,.22)' : 'rgba(180,16,16,.12)') : (pinned ? c + '28' : c + '14'),
             cursor: draggable ? 'grab' : 'pointer',
             outline: props.dropTarget ? ('1px dashed ' + c) : 'none',
           }}
@@ -112,7 +113,7 @@
             style={{ border: '1px solid ' + c, boxShadow: '0 4px 24px rgba(0,0,0,.8), 0 0 12px ' + c + '30' }}
           >
             <span className="boon-tip-rarity" style={{ color: c }}>
-              {b.rarity}
+              {isDoom ? 'doom' : b.rarity}
             </span>
             <span className="boon-tip-name">
               {b.name}
@@ -152,6 +153,13 @@
       var _s18 = useState(loadCollection); var collection = _s18[0]; var setCollection = _s18[1];
       var _s19 = useState(false);      var showCollection = _s19[0]; var setShowCollection = _s19[1];
       var _s20 = useState(false);      var showMenu = _s20[0]; var setShowMenu = _s20[1];
+      // Endless mode state
+      var _s21 = useState(false);      var isEndless = _s21[0]; var setIsEndless = _s21[1];
+      var _s22 = useState(0);          var endlessSpin = _s22[0]; var setEndlessSpin = _s22[1];
+      var _s23 = useState([]);         var doomGroupKeys = _s23[0]; var setDoomGroupKeys = _s23[1];
+      var _s24 = useState(loadCollection); var collectionAtRunStart = _s24[0]; var setCollectionAtRunStart = _s24[1];
+      var _s25 = useState(null);       var doomRevealGroup = _s25[0]; var setDoomRevealGroup = _s25[1];
+      var _s26 = useState(false);      var victoryIsGameOver = _s26[0]; var setVictoryIsGameOver = _s26[1];
 
       var spinRef = useRef(null);
       var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null), t4 = useRef([]);
@@ -173,33 +181,54 @@
         if (d.result === 'win') {
           var boonsForShop = d.fb;
           var growthAdjustedLevel = d.gl;
+
+          // Increment endless spin counter before boon shop
+          if (d.isEndless) setEndlessSpin(function(s) { return s + 1; });
+
           if (d.postSpinGrowth && d.postSpinGrowth.grew) {
             setTiles(d.postSpinGrowth.tiles);
             setNid(d.postSpinGrowth.nextId);
             boonsForShop = d.postSpinGrowth.boons;
             growthAdjustedLevel += 1;
             setGl(function(g) { return g + 1; });
-            var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
-              firstShop: d.shopsSeen === 0,
-              nonCommonPickStreak: d.nonCommonPickStreak,
-            });
-            setBoons(shop.boons);
-            setChoices(shop.choices);
-            setShopsSeen(function(n) { return n + 1; });
-            setPhase('growing');
-            t3.current = setTimeout(function() { setPhase('boon_select'); }, 1900);
+            if (!d.isEndless && growthAdjustedLevel === 5) {
+              // Victory!
+              setBoons(boonsForShop);
+              setPhase('victory_grow');
+              t3.current = setTimeout(function() {
+                setVictoryIsGameOver(false);
+                setPhase('victory');
+              }, 1900);
+            } else {
+              var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
+                firstShop: d.shopsSeen === 0,
+                nonCommonPickStreak: d.nonCommonPickStreak,
+              });
+              setBoons(shop.boons);
+              setChoices(shop.choices);
+              setShopsSeen(function(n) { return n + 1; });
+              setPhase('growing');
+              t3.current = setTimeout(function() { setPhase('boon_select'); }, 1900);
+            }
           } else {
-            var shop = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
+            var shop2 = drawBoons(d.nc, growthAdjustedLevel, boonsForShop, {
               firstShop: d.shopsSeen === 0,
               nonCommonPickStreak: d.nonCommonPickStreak,
             });
-            setBoons(shop.boons);
-            setChoices(shop.choices);
+            setBoons(shop2.boons);
+            setChoices(shop2.choices);
             setShopsSeen(function(n) { return n + 1; });
             setPhase('boon_select');
           }
         }
-        else setPhase('game_over');
+        else {
+          if (d.isEndless) {
+            setVictoryIsGameOver(true);
+            setPhase('victory');
+          } else {
+            setPhase('game_over');
+          }
+        }
       }, []);
 
       var finalizeReveal = useCallback(function(d) {
@@ -249,12 +278,24 @@
         setTiles(spinTiles);
         var layout = buildLayout(spinTiles, spinBoons, true);
         var angles = calcAngles(layout);
-        var doomed = tryDoom(gl);
+
+        // Boon-based doom check in endless mode
+        var doomFired = false;
+        if (isEndless && doomGroupKeys.length > 0) {
+          for (var di = 0; di < doomGroupKeys.length; di++) {
+            var dKey = doomGroupKeys[di];
+            var dGroup = spinBoons.filter(function(b) { return (b.group || b.id) === dKey; });
+            if (dGroup.length > 0 && Math.random() < calcGroupDoomChance(dGroup)) {
+              doomFired = true;
+              break;
+            }
+          }
+        }
+
         var idx;
-        if (doomed) {
-          // Doom: force the wheel to land on the lose sector (visual is consistent).
+        if (doomFired) {
           idx = findLoseIndex(layout);
-          if (idx < 0) { doomed = false; idx = pickWeighted(layout); }
+          if (idx < 0) { doomFired = false; idx = pickWeighted(layout); }
         } else {
           idx = pickWeighted(layout);
         }
@@ -266,7 +307,7 @@
 
         var landed = layout[idx].type;
         var result = landed, fb = spinBoons, triggered = [];
-        if (landed === 'lose' && !doomed) {
+        if (landed === 'lose' && !doomFired) {
           var res = tryRescue(spinBoons);
           result = res.ok ? 'win' : 'lose';
           fb = res.boons;
@@ -281,7 +322,8 @@
         spinRef.current = {
           targetDeg: target, result: result, baseType: landed, triggered: triggered,
           fb: fb, postSpinGrowth: postSpinGrowth, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen,
-          nonCommonPickStreak: nonCommonPickStreak
+          nonCommonPickStreak: nonCommonPickStreak,
+          isEndless: isEndless, endlessSpin: endlessSpin, doomGroupKeys: doomGroupKeys,
         };
         doneRef.current = false;
         spinInteractGuardRef.current = true;
@@ -294,7 +336,7 @@
         setWdeg(target);
         setPhase('spinning');
         t1.current = setTimeout(finish, 3500);
-      }, [phase, tiles, boons, wdeg, nChoices, gl, shopsSeen, nonCommonPickStreak, finish]);
+      }, [phase, tiles, boons, wdeg, nChoices, gl, shopsSeen, nonCommonPickStreak, isEndless, endlessSpin, doomGroupKeys, finish]);
 
       var handleInteract = useCallback(function(e) {
         e.stopPropagation();
@@ -338,7 +380,11 @@
       // Restore saved run state on mount
       useEffect(function() {
         var saved = loadRunState();
-        if (!saved) return;
+        if (!saved) {
+          // Fresh run: snapshot current collection as run-start baseline
+          setCollectionAtRunStart(loadCollection());
+          return;
+        }
         try {
           var restoredBoons = (saved.boons || []).map(deserializeBoon).filter(Boolean);
           setTiles(saved.tiles || INIT_TILES);
@@ -349,12 +395,16 @@
           setShopsSeen(saved.shopsSeen || 0);
           setNonCommonPickStreak(saved.nonCommonPickStreak || 0);
           setWdeg(saved.wdeg || 0);
+          setIsEndless(saved.isEndless || false);
+          setEndlessSpin(saved.endlessSpin || 0);
+          setDoomGroupKeys(saved.doomGroupKeys || []);
+          setCollectionAtRunStart(new Set(saved.collectionAtRunStart || []));
         } catch(e) { clearRunState(); }
       }, []);
 
       // Persist run state whenever core game state changes
       useEffect(function() {
-        if (phase === 'game_over') { clearRunState(); return; }
+        if (phase === 'game_over' || phase === 'victory') { clearRunState(); return; }
         if (phase !== 'idle') return;
         try {
           saveRunState({
@@ -364,9 +414,13 @@
             shopsSeen: shopsSeen,
             nonCommonPickStreak: nonCommonPickStreak,
             wdeg: wdeg,
+            isEndless: isEndless,
+            endlessSpin: endlessSpin,
+            doomGroupKeys: doomGroupKeys,
+            collectionAtRunStart: Array.from(collectionAtRunStart),
           });
         } catch(e) {}
-      }, [tiles, boons, sc, gl, nid, shopsSeen, nonCommonPickStreak, wdeg, phase]);
+      }, [tiles, boons, sc, gl, nid, shopsSeen, nonCommonPickStreak, wdeg, phase, isEndless, endlessSpin, doomGroupKeys, collectionAtRunStart]);
 
       var pick = useCallback(function(boon) {
         var res = applyBoon(boon, tiles, boons, nid);
@@ -378,12 +432,63 @@
         if (res.flippedIds && res.flippedIds.length > 0) {
           setTimeout(function() { setFlippedTiles([]); }, 560);
         }
+
+        // Helper: trigger doom mechanics then go idle (used in endless mode after each shop pick)
+        function triggerEndlessDoomThenIdle(postPickBoons) {
+          if (endlessSpin === 2) {
+            setPhase('doom_approaches');
+            t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
+          } else if (endlessSpin >= 3) {
+            var shownPP = postPickBoons.filter(function(b) { return b.effect !== 'add_win'; });
+            var gMap = {}, gOrder = [];
+            shownPP.forEach(function(b) {
+              var key = b.group || b.id;
+              if (!gMap[key]) { gMap[key] = []; gOrder.push(key); }
+              gMap[key].push(b);
+            });
+            var nonDoom = gOrder.filter(function(k) { return doomGroupKeys.indexOf(k) === -1; });
+            if (nonDoom.length > 0) {
+              var vKey = nonDoom[Math.floor(Math.random() * nonDoom.length)];
+              var vBoons = gMap[vKey];
+              setDoomRevealGroup({ groupKey: vKey, boons: vBoons, first: vBoons[0] });
+              setPhase('doom_reveal');
+              var newDoomKeys = doomGroupKeys.concat([vKey]);
+              t3.current = setTimeout(function() {
+                setDoomGroupKeys(newDoomKeys);
+                setDoomRevealGroup(null);
+                setPhase('idle');
+              }, 3500);
+            } else {
+              setPhase('idle');
+            }
+          } else {
+            setPhase('idle');
+          }
+        }
+
         if (res.grew) {
-          setGl(function(g) { return g + 1; });
-          setPhase('growing');
-          t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
+          var newGl = gl + 1;
+          setGl(newGl);
+          if (!isEndless && newGl === 5) {
+            // Victory via boon pick growth
+            setPhase('victory_grow');
+            t3.current = setTimeout(function() {
+              setVictoryIsGameOver(false);
+              setPhase('victory');
+            }, 1900);
+          } else if (isEndless) {
+            setPhase('growing');
+            t3.current = setTimeout(function() { triggerEndlessDoomThenIdle(res.boons); }, 1900);
+          } else {
+            setPhase('growing');
+            t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
+          }
         } else {
-          setPhase('idle');
+          if (isEndless) {
+            triggerEndlessDoomThenIdle(res.boons);
+          } else {
+            setPhase('idle');
+          }
         }
         if (!NO_TRACK && boon.rarity === 'legendary') { fetch('https://api.counterapi.dev/v2/pick3slop/legendary-boons/up').catch(function() {}); }
         setNonCommonPickStreak(function(streak) {
@@ -395,7 +500,7 @@
           saveCollection(next);
           return next;
         });
-      }, [tiles, boons, nid]);
+      }, [tiles, boons, nid, gl, isEndless, endlessSpin, doomGroupKeys]);
 
       var rerollChoices = useCallback(function() {
         if (phase !== 'boon_select') return;
@@ -413,12 +518,30 @@
         revDone.current = true;
         spinRef.current = null;
         clearRunState();
+        var currentColl = loadCollection();
+        setCollectionAtRunStart(currentColl);
         setTiles(INIT_TILES);
         setBoons([]); setSc(0); setGl(0); setPhase('idle');
         setWdeg(0); setAnim(false); setRtile(null);
         setFlippedTiles([]); setShakingBoon(null); setRevealFlip(false);
         setDragIid(null); setDragOverIid(null);
         setChoices([]); setNid(6); setShopsSeen(0); setNonCommonPickStreak(0);
+        setIsEndless(false); setEndlessSpin(0); setDoomGroupKeys([]);
+        setDoomRevealGroup(null); setVictoryIsGameOver(false);
+      }, []);
+
+      var enterEndless = useCallback(function() {
+        [t1, t2, t3, spinGuardTimeoutRef].forEach(function(r) { clearTimeout(r.current); });
+        t4.current.forEach(function(tid) { clearTimeout(tid); });
+        t4.current = [];
+        setIsEndless(true);
+        setEndlessSpin(0);
+        setDoomGroupKeys([]);
+        setDoomRevealGroup(null);
+        setVictoryIsGameOver(false);
+        // Show "Wheel Grows" animation then resume play
+        setPhase('growing');
+        t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
       }, []);
 
       var giveUp = useCallback(function() {
@@ -433,8 +556,13 @@
         setRevealFlip(false);
         clearRunState();
         setShowMenu(false);
-        setPhase('game_over');
-      }, []);
+        if (isEndless) {
+          setVictoryIsGameOver(true);
+          setPhase('victory');
+        } else {
+          setPhase('game_over');
+        }
+      }, [isEndless]);
 
       var shownBoons = boons.filter(function(b) { return b.effect !== 'add_win'; });
       var flippedMap = {};
@@ -454,10 +582,16 @@
           var first = grp[0];
           var n = grp.length;
           var totalCharges = grp.reduce(function(sum, b) { return sum + (b.charges || 0); }, 0);
+          var isDoom = doomGroupKeys.indexOf(key) !== -1;
+          var doomChancePct = isDoom ? Math.round(calcGroupDoomChance(grp) * 1000) / 10 : 0;
           return Object.assign({}, first, {
-            name: first.name + (n > 1 ? ' \xd7' + n : ''),
-            desc: getStackedDesc(grp),
+            name: isDoom ? 'DOOM' : (first.name + (n > 1 ? ' \xd7' + n : '')),
+            desc: isDoom
+              ? doomChancePct + '% chance of immediate loss per spin'
+              : getStackedDesc(grp),
             charges: totalCharges,
+            isDoom: isDoom,
+            doomChancePct: doomChancePct,
           });
         });
       })();
@@ -542,7 +676,7 @@
         return winSz / totalSz;
       })();
 
-      var isOverlay = phase === 'boon_select' || phase === 'game_over';
+      var isOverlay = phase === 'boon_select' || phase === 'game_over' || phase === 'victory';
       var totalBoons = BOONS.length;
       var seenBoons  = BOONS.filter(function(b) { return collection.has(b.id); }).length;
 
@@ -610,7 +744,7 @@
           onClick={handleInteract}
         >
           {/* Menu button — fixed top-left, outside blurred area */}
-          {phase !== 'game_over' && (
+          {phase !== 'game_over' && phase !== 'victory' && (
             <button
               className="btn-menu"
               onClick={function(e) { e.stopPropagation(); setShowMenu(true); }}
@@ -880,6 +1014,54 @@
                   </button>
                 </div>
               )}
+
+              {phase === 'victory' && (
+                <div className="victory-panel">
+                  <div className={victoryIsGameOver ? 'eliminated-text' : 'victory-title'}>
+                    {victoryIsGameOver ? 'GAME OVER' : 'VICTORY!'}
+                  </div>
+                  <div className="spins-survived">
+                    {sc} SPINS SURVIVED
+                  </div>
+                  {displayBoonGroups.length > 0 && (
+                    <div className="final-boons">
+                      <div className="final-boons-label">YOUR BOONS</div>
+                      <div className="final-boons-items">
+                        {displayBoonGroups.map(function(b) {
+                          var isNew = !b.isDoom && collection.has(b.id) && !collectionAtRunStart.has(b.id);
+                          return (
+                            <span key={'v_' + b.iid} style={{ fontWeight: isNew ? 700 : undefined }}>
+                              <BoonTag b={b} large={true} />
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <div className="victory-btn-row">
+                    {!victoryIsGameOver && (
+                      <button
+                        className="victory-btn victory-btn-endless"
+                        onClick={function(e) { e.stopPropagation(); enterEndless(); }}
+                      >
+                        ENDLESS
+                      </button>
+                    )}
+                    <button
+                      className="victory-btn victory-btn-collection"
+                      onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}
+                    >
+                      COLLECTION
+                    </button>
+                    <button
+                      className="victory-btn victory-btn-restart"
+                      onClick={function(e) { e.stopPropagation(); restart(); }}
+                    >
+                      START OVER
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -888,6 +1070,40 @@
             <div className="growing-overlay">
               <div className="growing-text">
                 WHEEL GROWS
+              </div>
+            </div>
+          )}
+
+          {/* Victory grow banner */}
+          {phase === 'victory_grow' && (
+            <div className="growing-overlay">
+              <div className="growing-text victory-grow-text">
+                VICTORY
+              </div>
+            </div>
+          )}
+
+          {/* Doom Approaches banner */}
+          {phase === 'doom_approaches' && (
+            <div className="growing-overlay">
+              <div className="growing-text doom-approaches-text">
+                DOOM APPROACHES
+              </div>
+            </div>
+          )}
+
+          {/* Doom Reveal overlay */}
+          {phase === 'doom_reveal' && doomRevealGroup && (
+            <div className="doom-reveal-overlay">
+              <div className="doom-reveal-boon">
+                <div className="doom-reveal-original">
+                  <span style={{ color: RC[doomRevealGroup.first.rarity] }}>
+                    {doomRevealGroup.first.name}{doomRevealGroup.boons.length > 1 ? ' \xd7' + doomRevealGroup.boons.length : ''}
+                  </span>
+                </div>
+                <div className="doom-reveal-doom">
+                  DOOM
+                </div>
               </div>
             </div>
           )}
