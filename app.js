@@ -174,6 +174,7 @@
       var _s24 = useState(loadCollection); var collectionAtRunStart = _s24[0]; var setCollectionAtRunStart = _s24[1];
       var _s25 = useState(null);       var doomRevealGroup = _s25[0]; var setDoomRevealGroup = _s25[1];
       var _s26 = useState(false);      var victoryIsGameOver = _s26[0]; var setVictoryIsGameOver = _s26[1];
+      var _s27 = useState(false);      var revealDoom = _s27[0]; var setRevealDoom = _s27[1];
 
       var spinRef = useRef(null);
       var t1 = useRef(null), t2 = useRef(null), t3 = useRef(null), t4 = useRef([]);
@@ -249,13 +250,15 @@
         setAnim(false);
         setWdeg(d.targetDeg);
         setBoons(d.fb);
-        setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan });
+        setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan, isDoom: d.isDoom });
         setRevealFlip(false);
+        setRevealDoom(false);
         setPhase('reveal');
         setSc(function(n) { return n + 1; });
         revDone.current = false;
-        var isRescued = d.baseType === 'lose' && d.result === 'win';
-        t2.current = setTimeout(advance, isRescued ? 2500 : 720);
+        var isRescued = !d.isDoom && d.baseType === 'lose' && d.result === 'win';
+        var delay = d.isDoom ? 3000 : (isRescued ? 2500 : 720);
+        t2.current = setTimeout(advance, delay);
       }, [advance]);
 
       var finish = useCallback(function() {
@@ -308,20 +311,34 @@
 
         var idx;
         if (doomFired) {
-          idx = findLoseIndex(layout);
-          if (idx < 0) { doomFired = false; idx = pickWeighted(layout); }
+          // Try to land on a win tile so the reveal can show Win → DOOM → result
+          var wIdx = -1;
+          for (var wDi = 0; wDi < layout.length; wDi++) {
+            if (layout[wDi].type === 'win') { wIdx = wDi; break; }
+          }
+          if (wIdx >= 0) {
+            idx = wIdx;
+          } else {
+            idx = findLoseIndex(layout);
+            if (idx < 0) { doomFired = false; idx = pickWeighted(layout); }
+          }
         } else {
           idx = pickWeighted(layout);
         }
         var tc     = angles[idx].center;
-        var hs     = (angles[idx].end - angles[idx].start) / 2;
+        // halfSpan: total proportion of win (for doom) or landed type (normal) → accurate triangle
+        var totalSz = layout.reduce(function(s, t) { return s + t.sz; }, 0);
+        var displayType = doomFired ? 'win' : layout[idx].type;
+        var typeSz = layout.reduce(function(s, t) { return s + (t.type === displayType ? t.sz : 0); }, 0);
+        var hs     = totalSz > 0 ? (typeSz / totalSz) * 90 : 30;
         var cm     = wdeg % 360;
         var delta  = ((LAND - tc - cm) % 360 + 360) % 360;
         var target = wdeg + (5 + Math.floor(Math.random() * 4)) * 360 + delta;
 
         var landed = layout[idx].type;
         var result = landed, fb = spinBoons, triggered = [];
-        if (landed === 'lose' && !doomFired) {
+        if (landed === 'lose' || doomFired) {
+          if (doomFired) result = 'lose'; // doom forces a loss before rescue check
           var res = tryRescue(spinBoons);
           result = res.ok ? 'win' : 'lose';
           fb = res.boons;
@@ -338,6 +355,7 @@
           fb: fb, postSpinGrowth: postSpinGrowth, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen,
           nonCommonPickStreak: nonCommonPickStreak,
           isEndless: isEndless, endlessSpin: endlessSpin, doomGroupKeys: doomGroupKeys,
+          isDoom: doomFired,
         };
         doneRef.current = false;
         spinInteractGuardRef.current = true;
@@ -377,6 +395,12 @@
 
       useEffect(function() {
         if (phase !== 'reveal' || !rtile) return;
+        if (rtile.isDoom) {
+          // Win (0ms) → DOOM (700ms) → Lose/Saved (1500ms)
+          var doomTid1 = setTimeout(function() { setRevealDoom(true); }, 700);
+          var doomTid2 = setTimeout(function() { setRevealFlip(true); }, 1500);
+          return function() { clearTimeout(doomTid1); clearTimeout(doomTid2); };
+        }
         if (rtile.baseType === 'lose' && rtile.type === 'win') {
           var tid = setTimeout(function() { setRevealFlip(true); }, 800);
           return function() { clearTimeout(tid); };
@@ -537,7 +561,7 @@
         setTiles(INIT_TILES);
         setBoons([]); setSc(0); setGl(0); setPhase('idle');
         setWdeg(0); setAnim(false); setRtile(null);
-        setFlippedTiles([]); setShakingBoon(null); setRevealFlip(false);
+        setFlippedTiles([]); setShakingBoon(null); setRevealFlip(false); setRevealDoom(false);
         setDragIid(null); setDragOverIid(null);
         setChoices([]); setNid(6); setShopsSeen(0); setNonCommonPickStreak(0);
         setIsEndless(false); setEndlessSpin(0); setDoomGroupKeys([]);
@@ -568,6 +592,7 @@
         setAnim(false);
         setShakingBoon(null);
         setRevealFlip(false);
+        setRevealDoom(false);
         clearRunState();
         setShowMenu(false);
         if (isEndless) {
@@ -894,7 +919,37 @@
               <div className="reveal-card">
                 <svg width={310} height={260} overflow="visible">
                   <g>
-                  {(rtile.baseType === 'lose' && rtile.type === 'win') ? (
+                  {rtile.isDoom ? (
+                    <>
+                      {/* Step 0: Win triangle */}
+                      <path
+                        d={revealWedge(rtile.halfSpan)}
+                        fill="#d4d4d4"
+                        stroke="#888"
+                        strokeWidth={2}
+                      />
+                      {/* Step 1: DOOM overtakes (same size) */}
+                      {revealDoom && !revealFlip && (
+                        <path
+                          d={revealWedge(rtile.halfSpan)}
+                          fill="#CC1010"
+                          stroke="#990000"
+                          strokeWidth={2}
+                          style={{ animation: 'edgeOvertake .45s ease both' }}
+                        />
+                      )}
+                      {/* Step 2: Final outcome (same size) */}
+                      {revealFlip && (
+                        <path
+                          d={revealWedge(rtile.halfSpan)}
+                          fill={rtile.type === 'win' ? '#D4AF37' : '#242424'}
+                          stroke={rtile.type === 'win' ? '#b8962a' : '#555'}
+                          strokeWidth={2}
+                          style={{ animation: 'edgeOvertake .45s ease both' }}
+                        />
+                      )}
+                    </>
+                  ) : (rtile.baseType === 'lose' && rtile.type === 'win') ? (
                     <>
                       <path
                         d={revealWedge(rtile.halfSpan)}
@@ -925,10 +980,29 @@
                     textAnchor="middle" dominantBaseline="middle"
                     fontFamily="'Cinzel', serif" fontWeight="700"
                     fontSize={20} letterSpacing="3"
-                    fill={(rtile.baseType === 'lose' && rtile.type === 'win') ? (revealFlip ? '#1a1a1a' : '#d0d0d0') : (rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0')}
-                    style={(rtile.baseType === 'lose' && rtile.type === 'win' && revealFlip) ? { animation: 'rescueTextFade .3s ease' } : null}
+                    fill={
+                      rtile.isDoom
+                        ? (revealFlip
+                          ? (rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0')
+                          : (revealDoom ? '#d0d0d0' : '#1a1a1a'))
+                        : (rtile.baseType === 'lose' && rtile.type === 'win')
+                          ? (revealFlip ? '#1a1a1a' : '#d0d0d0')
+                          : (rtile.type === 'win' ? '#1a1a1a' : '#d0d0d0')
+                    }
+                    style={
+                      rtile.isDoom
+                        ? ((revealDoom || revealFlip) ? { animation: 'rescueTextFade .3s ease' } : null)
+                        : (rtile.baseType === 'lose' && rtile.type === 'win' && revealFlip) ? { animation: 'rescueTextFade .3s ease' } : null
+                    }
                   >
-                    {(rtile.baseType === 'lose' && rtile.type === 'win') ? (revealFlip ? 'SAVED!' : 'x LOSE x') : (rtile.type === 'win' ? '* WIN *' : 'x LOSE x')}
+                    {rtile.isDoom
+                      ? (revealFlip
+                        ? (rtile.type === 'win' ? 'SAVED!' : 'x LOSE x')
+                        : (revealDoom ? 'DOOM' : '* WIN *'))
+                      : (rtile.baseType === 'lose' && rtile.type === 'win')
+                        ? (revealFlip ? 'SAVED!' : 'x LOSE x')
+                        : (rtile.type === 'win' ? '* WIN *' : 'x LOSE x')
+                    }
                   </text>
                   </g>
                 </svg>

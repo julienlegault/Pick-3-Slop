@@ -506,6 +506,7 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   padding: 26px 52px;
   border: 2px solid #888;
   color: #e0e0e0;
+  background: #111;
 }
 .doom-reveal-doom {
   position: absolute;
@@ -518,6 +519,7 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   letter-spacing: .18em;
   color: #CC1010;
   border: 2px solid #CC1010;
+  background: #111;
   text-shadow: 0 0 22px rgba(200,16,16,.6);
   box-shadow: 0 0 40px rgba(200,16,16,.2);
   animation: doomOvertake .55s ease 1.5s both;
