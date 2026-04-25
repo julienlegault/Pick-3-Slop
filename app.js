@@ -60,12 +60,26 @@
       var [pinned, setPinned] = useState(false);
       var startRef = useRef(null);
       var movedRef = useRef(false);
+      var tagRef = useRef(null);
+
+      useEffect(function() {
+        if (!pinned) return;
+        var el = tagRef.current;
+        function handleOutsideClick(e) {
+          if (el && el.contains(e.target)) return;
+          setPinned(false);
+        }
+        document.addEventListener('click', handleOutsideClick, true);
+        return function() { document.removeEventListener('click', handleOutsideClick, true); };
+      }, [pinned]);
+
       var isDoom = b.isDoom;
       var c = isDoom ? '#CC1010' : RC[b.rarity];
       var cls = 'boon-tag boon-tag-base ' + (large ? 'boon-tag-large' : 'boon-tag-small') + (pinned ? ' pinned' : '') + (shaking ? ' shaking' : '') + (isDoom ? ' doom-boon-tag' : '');
 
       return (
         <span
+          ref={tagRef}
           className={cls}
           data-boon-iid={b.iid}
           onPointerDown={function(e) {
