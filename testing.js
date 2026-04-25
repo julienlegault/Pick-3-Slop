@@ -12,7 +12,7 @@
     var prepareSpin = window.Pick3Logic.prepareSpin;
     var buildLayout = window.Pick3Logic.buildLayout;
     var pickWeighted = window.Pick3Logic.pickWeighted;
-    var tryDoom = window.Pick3Logic.tryDoom;
+    var calcGroupDoomChance = window.Pick3Logic.calcGroupDoomChance;
     var findLoseIndex = window.Pick3Logic.findLoseIndex;
     var drawBoons = window.Pick3Logic.drawBoons;
     var tryRescue = window.Pick3Logic.tryRescue;
@@ -253,6 +253,10 @@
       var pickedRarityScores = [];
       var picks = [];
       var nonCommonBoons = 0;
+      var nonCommonPickStreak = 0;
+      var isEndless = false;
+      var endlessSpin = 0;
+      var doomGroupKeys = [];
       // Safety cap prevents a pathological run from looping forever.
       var cap = options.maxSpinsPerRun;
 
@@ -263,17 +267,30 @@
         tiles = prep.tiles;
         boons = prep.boons;
         var layout = buildLayout(tiles, boons, true);
-        var doomed = tryDoom(gl);
+
+        // Boon-based doom check in endless mode (matches actual game logic in app.js)
+        var doomFired = false;
+        if (isEndless && doomGroupKeys.length > 0) {
+          for (var di = 0; di < doomGroupKeys.length; di++) {
+            var dKey = doomGroupKeys[di];
+            var dGroup = boons.filter(function(b) { return (b.group || b.id) === dKey; });
+            if (dGroup.length > 0 && Math.random() < calcGroupDoomChance(dGroup)) {
+              doomFired = true;
+              break;
+            }
+          }
+        }
+
         var idx;
-        if (doomed) {
+        if (doomFired) {
           idx = findLoseIndex(layout);
-          if (idx < 0) { doomed = false; idx = pickWeighted(layout); }
+          if (idx < 0) { doomFired = false; idx = pickWeighted(layout); }
         } else {
           idx = pickWeighted(layout);
         }
         var result = layout[idx].type;
 
-        if (result === 'lose' && !doomed) {
+        if (result === 'lose' && !doomFired) {
           var res = tryRescue(boons);
           result = res.ok ? 'win' : 'lose';
           boons = res.boons;
@@ -287,7 +304,16 @@
           gl += 1;
         }
 
-        var shop = drawBoons(nChoices, gl, boons, { firstShop: shopsSeen === 0 });
+        // Transition to endless mode once gl reaches 5 (matches standard game victory condition)
+        if (!isEndless && gl >= 5) isEndless = true;
+
+        // In endless mode, increment shop counter before drawing boons (matches game logic)
+        if (isEndless) endlessSpin += 1;
+
+        var shop = drawBoons(nChoices, gl, boons, {
+          firstShop: shopsSeen === 0,
+          nonCommonPickStreak: nonCommonPickStreak,
+        });
         var choices = shop.choices;
         var shopTopRarity = highestShopRarity(choices);
         boons = shop.boons;
@@ -299,6 +325,31 @@
         tiles = applied.tiles;
         boons = applied.boons;
         nid = applied.nextId;
+
+        // Update non-common pick streak (matches game logic in boon_select handler)
+        nonCommonPickStreak = picked.boon.rarity === 'common' ? 0 : (nonCommonPickStreak + 1);
+
+        if (applied.grew) {
+          gl += 1;
+          if (!isEndless && gl >= 5) isEndless = true;
+        }
+
+        // After each boon pick in endless mode, reveal one new doom group when applicable
+        // (matches triggerEndlessDoomThenIdle logic in app.js)
+        if (isEndless && endlessSpin >= 3) {
+          var gKeys = [], gSeen = {};
+          applied.boons.forEach(function(b) {
+            if (b.effect === 'add_win') return;
+            var key = b.group || b.id;
+            if (!gSeen[key]) { gSeen[key] = true; gKeys.push(key); }
+          });
+          var nonDoom = gKeys.filter(function(k) { return doomGroupKeys.indexOf(k) === -1; });
+          if (nonDoom.length > 0) {
+            var vKey = nonDoom[Math.floor(Math.random() * nonDoom.length)];
+            doomGroupKeys = doomGroupKeys.concat([vKey]);
+          }
+        }
+
         pickedVals.push(picked.value);
         pickedRarityScores.push(RARITY_RANK[picked.boon.rarity] || 0);
         if ((picked.boon.rarity || 'common') !== 'common') nonCommonBoons += 1;
@@ -311,7 +362,6 @@
           },
           shopHighestRarity: shopTopRarity
         });
-        if (applied.grew) gl += 1;
       }
 
       var avgSelectability = 0;
