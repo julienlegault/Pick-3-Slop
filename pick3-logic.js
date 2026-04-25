@@ -771,7 +771,7 @@
     return 'M ' + CX + ',' + CY + ' L ' + s.x + ',' + s.y + ' A ' + R + ',' + R + ' 0 ' + lg + ' 1 ' + e.x + ',' + e.y + ' Z';
   }
   function revealWedge(halfSpan) {
-    var hs = Math.max(12, Math.min(65, halfSpan));
+    var hs = Math.max(5, Math.min(87, halfSpan));
     var ox = 0, oy = 130, rr = 265;
     function p(d) {
       var rad = (d - 90) * Math.PI / 180;
