@@ -167,7 +167,7 @@
 
   addMany(numericBoon(
     'rescue_independent',
-    'Fractured Luck',
+    'Lucky Break',
     'rescue_independent',
     { uncommon: 7, rare: 5, legendary: 2 },
     { chance: {
@@ -181,7 +181,7 @@
   BOONS.push(boonTemplate({
     id: 'add_win_common',
     group: 'add_win',
-    name: 'Flip a Lose to Win',
+    name: 'Win Tile',
     rarity: 'common',
     w: 30,
     effect: 'add_win',
@@ -191,7 +191,7 @@
 
   addMany(numericBoon(
     'rescue_additive',
-    'Stacked Salvation',
+    'Second Wind',
     'rescue_additive',
     { uncommon: 7, rare: 5, legendary: 2 },
     {
@@ -211,7 +211,7 @@
 
   addMany(numericBoon(
     'rescue_multiplicative',
-    'Layered Fortune',
+    'Fortune\'s Favor',
     'rescue_multiplicative',
     { uncommon: 7, rare: 5, legendary: 2 },
     { chance: {
@@ -224,7 +224,7 @@
 
   addMany(numericBoon(
     'tide_shift',
-    'Fortunes Tilt',
+    'Luck of the Draw',
     'tide_shift',
     { uncommon: 6, rare: 4, legendary: 2 },
     {
@@ -248,7 +248,7 @@
     BOONS.push(boonTemplate({
       id: 'rarity_boost_' + targetRarity,
       group: 'rarity_boost_' + targetRarity,
-      name: targetRarity.charAt(0).toUpperCase() + targetRarity.slice(1) + ' Beacon',
+      name: targetRarity.charAt(0).toUpperCase() + targetRarity.slice(1) + ' Magnet',
       rarity: targetRarity === 'common' ? 'uncommon' : targetRarity,
       w: targetRarity === 'common' ? 4 : (targetRarity === 'uncommon' ? 5 : (targetRarity === 'rare' ? 4 : 2)),
       effect: 'rarity_boost',
@@ -260,7 +260,7 @@
 
   addMany(numericBoon(
     'rescue_fragile',
-    'Shattering Mercy',
+    'Brittle Blessing',
     'rescue_fragile',
     { uncommon: 6, rare: 4, legendary: 2 },
     {
@@ -281,7 +281,7 @@
 
   addMany(numericBoon(
     'shop_reroll_consumable',
-    'Pocket Reroll',
+    'Extra Roll',
     'shop_reroll_consumable',
     { uncommon: 6, rare: 4, legendary: 2 },
     { charges: {
@@ -296,7 +296,7 @@
   BOONS.push(boonTemplate({
     id: 'shop_reroll_growth',
     group: 'shop_reroll_growth',
-    name: 'Growth Mulligan',
+    name: 'Do-Over',
     rarity: 'rare',
     w: 3,
     effect: 'shop_reroll_growth',
@@ -306,7 +306,7 @@
 
   addMany(numericBoon(
     'temp_win',
-    'Flash Fortune',
+    'Power Surge',
     'temp_win',
     { uncommon: 6, rare: 4, legendary: 2 },
     { amount: {
@@ -320,7 +320,7 @@
   BOONS.push(boonTemplate({
     id: 'duplicate_right',
     group: 'duplicate_right',
-    name: 'Right-Hand Echo',
+    name: 'Echo Chamber',
     rarity: 'rare',
     w: 3,
     effect: 'duplicate_right',
@@ -330,7 +330,7 @@
   BOONS.push(boonTemplate({
     id: 'shield',
     group: 'shield',
-    name: 'Last Stand',
+    name: 'Final Stand',
     rarity: 'uncommon',
     w: 5,
     effect: 'shield',
@@ -343,7 +343,7 @@
     BOONS.push(boonTemplate({
       id: 'next_shop_guarantee_rarity_' + r,
       group: 'next_shop_guarantee_rarity',
-      name: 'Fated Market (' + r + ')',
+      name: 'Guaranteed Drop (' + r + ')',
       rarity: r,
       w: r === 'uncommon' ? 5 : (r === 'rare' ? 3 : 1),
       effect: 'next_shop_guarantee_rarity',
@@ -356,7 +356,7 @@
 
   addMany(numericBoon(
     'win_merge',
-    'Merging Triumph',
+    'Combo Bonus',
     'win_merge',
     { uncommon: 5, rare: 4, legendary: 2 },
     { mergeGrow: {
@@ -371,7 +371,7 @@
 
   addMany(numericBoon(
     'anchor_lose',
-    'Anchored Misfortune',
+    'Dead Weight',
     'anchor_lose',
     { uncommon: 5, rare: 4, legendary: 2 },
     { shrinkPerSpin: {
@@ -384,7 +384,7 @@
 
   addMany(numericBoon(
     'growth_bonus_win',
-    'Overgrowth',
+    'Win Streak',
     'growth_bonus_win',
     { uncommon: 5, rare: 4, legendary: 2 },
     { amount: {
@@ -398,7 +398,7 @@
   BOONS.push(boonTemplate({
     id: 'sacrifice_instead',
     group: 'sacrifice_instead',
-    name: 'Blood Bargain',
+    name: 'Blood Price',
     rarity: 'rare',
     w: 3,
     effect: 'sacrifice_instead',
@@ -408,7 +408,7 @@
   BOONS.push(boonTemplate({
     id: 'upgrade_random',
     group: 'upgrade_random',
-    name: 'Ascension Spark',
+    name: 'Power Up',
     rarity: 'rare',
     w: 3,
     effect: 'upgrade_random',
@@ -418,7 +418,7 @@
   BOONS.push(boonTemplate({
     id: 'convert_same_rarity',
     group: 'convert_same_rarity',
-    name: 'Alchemical Swap',
+    name: 'Random Reroll',
     rarity: 'rare',
     w: 3,
     effect: 'convert_same_rarity',
@@ -427,7 +427,7 @@
 
   addMany(numericBoon(
     'free_copy_on_pick',
-    'Double Take',
+    'Double Up',
     'free_copy_on_pick',
     { uncommon: 5, rare: 4, legendary: 2 },
     { chance: {
@@ -440,7 +440,7 @@
 
   addMany(numericBoon(
     'preserve_one_time',
-    'Spent? Not Yet',
+    'Extra Uses',
     'preserve_one_time',
     { uncommon: 5, rare: 4, legendary: 2 },
     { chance: {
@@ -454,7 +454,7 @@
   BOONS.push(boonTemplate({
     id: 'guarantee_owned_type',
     group: 'guarantee_owned_type',
-    name: 'Targeted Procurement',
+    name: 'Wishlist',
     rarity: 'legendary',
     w: 1,
     effect: 'guarantee_owned_type',
@@ -465,7 +465,7 @@
 
   addMany(numericBoon(
     'value_aura',
-    'Compounding Numerics',
+    'Number Go Up',
     'value_aura',
     { uncommon: 4, rare: 3, legendary: 2 },
     { bonus: {
