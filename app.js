@@ -185,8 +185,11 @@
       var dragPointerTargetRef = useRef(null);
       var dragPointerIdRef = useRef(null);
 
-      var nChoices = 3 + boons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
-      var shopRerolls = getShopRerolls(boons, gl);
+      var activeBoons = boons.filter(function(b) {
+      return doomGroupKeys.indexOf(b.group || b.id) === -1;
+       });
+      var nChoices = 3 + activeBoons.filter(function(b) { return b.effect === 'extra_choice'; }).length;
+      var shopRerolls = getShopRerolls(activeBoons, gl);
 
       var advance = useCallback(function() {
         if (revDone.current) return;
@@ -288,8 +291,10 @@
 
       var spin = useCallback(function() {
         if (phase !== 'idle') return;
+        var doomedBoons = boons.filter(function(b) { return doomGroupKeys.indexOf(b.group || b.id) !== -1; });
+        var activeForSpin = boons.filter(function(b) { return doomGroupKeys.indexOf(b.group || b.id) === -1; });
+        var prep = prepareSpin(tiles, activeForSpin);
         if (!NO_TRACK) { fetch('https://api.counterapi.dev/v2/pick3slop/spins/up').catch(function() {}); }
-        var prep = prepareSpin(tiles, boons);
         var spinTiles = prep.tiles;
         var spinBoons = prep.boons;
         setTiles(spinTiles);
@@ -348,6 +353,8 @@
         if (result === 'win') {
           var growth = enforceMinimumLoseAreaAfterSpin(spinTiles, fb, nid);
           if (growth.grew) postSpinGrowth = growth;
+          fb = fb.concat(doomedBoons);
+          if (postSpinGrowth) postSpinGrowth.boons = postSpinGrowth.boons.concat(doomedBoons);
         }
 
         spinRef.current = {
@@ -461,10 +468,12 @@
       }, [tiles, boons, sc, gl, nid, shopsSeen, nonCommonPickStreak, wdeg, phase, isEndless, endlessSpin, doomGroupKeys, collectionAtRunStart]);
 
       var pick = useCallback(function(boon) {
-        var res = applyBoon(boon, tiles, boons, nid);
-        setTiles(res.tiles);
-        setBoons(res.boons);
-        setNid(res.nextId);
+         var doomedBoons = boons.filter(function(b) { return doomGroupKeys.indexOf(b.group || b.id) !== -1; });
+         var activeForPick = boons.filter(function(b) { return doomGroupKeys.indexOf(b.group || b.id) === -1; });
+         var res = applyBoon(boon, tiles, activeForPick, nid);
+         setTiles(res.tiles);
+         setBoons(res.boons.concat(doomedBoons));
+         setNid(res.nextId);
         setChoices([]);
         setFlippedTiles(res.flippedIds || []);
         if (res.flippedIds && res.flippedIds.length > 0) {
@@ -516,14 +525,17 @@
             }, 1900);
           } else if (isEndless) {
             setPhase('growing');
-            t3.current = setTimeout(function() { triggerEndlessDoomThenIdle(res.boons); }, 1900);
+            t3.current = setTimeout(function() { 
+                var fullBoons = res.boons.concat(doomedBoons);
+                triggerEndlessDoomThenIdle(fullBoons); }, 1900);
           } else {
             setPhase('growing');
             t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
           }
         } else {
           if (isEndless) {
-            triggerEndlessDoomThenIdle(res.boons);
+            var fullBoons = res.boons.concat(doomedBoons);
+            triggerEndlessDoomThenIdle(fullBoons);
           } else {
             setPhase('idle');
           }
