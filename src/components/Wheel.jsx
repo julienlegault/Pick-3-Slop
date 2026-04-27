@@ -22,14 +22,14 @@ function buildRenderGroups(dl, da, probWinFrac) {
   if (probWinFrac !== null) return [];
   var n = dl.length;
   if (n === 0) return [];
-  var tiny = dl.map(function(t, i) { return (da[i].end - da[i].start) < MERGE_THRESHOLD_DEG; });
+  var isTinyTile = dl.map(function(t, i) { return (da[i].end - da[i].start) < MERGE_THRESHOLD_DEG; });
   var groups = [];
   var i = 0;
   while (i < n) {
     var type = dl[i].type;
     var items = [i];
     var j = i + 1;
-    while (j < n && dl[j].type === type && (tiny[j - 1] || tiny[j])) {
+    while (j < n && dl[j].type === type && (isTinyTile[j - 1] || isTinyTile[j])) {
       items.push(j);
       j++;
     }
@@ -39,7 +39,7 @@ function buildRenderGroups(dl, da, probWinFrac) {
   // Circular merge: if last and first groups share type with a tiny boundary, merge them.
   if (groups.length >= 2) {
     var first = groups[0], last = groups[groups.length - 1];
-    if (first.type === last.type && (tiny[last.items[last.items.length - 1]] || tiny[first.items[0]])) {
+    if (first.type === last.type && (isTinyTile[last.items[last.items.length - 1]] || isTinyTile[first.items[0]])) {
       groups[0] = {
         items: last.items.concat(first.items),
         startAngle: last.startAngle,
