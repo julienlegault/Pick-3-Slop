@@ -331,11 +331,13 @@
           idx = pickWeighted(layout);
         }
         var tc     = angles[idx].center;
-        // halfSpan: total proportion of win (for doom) or landed type (normal) → accurate triangle
+        // halfSpan: at virtual wheel sizes use type probability; at real tile sizes use the individual tile's slice
         var totalSz = layout.reduce(function(s, t) { return s + t.sz; }, 0);
         var displayType = doomFired ? 'win' : layout[idx].type;
         var typeSz = layout.reduce(function(s, t) { return s + (t.type === displayType ? t.sz : 0); }, 0);
-        var hs     = totalSz > 0 ? (typeSz / totalSz) * 90 : 30;
+        var hs     = totalSz > 0
+          ? (gl >= PROB_DISPLAY_THRESHOLD ? (typeSz / totalSz) : (layout[idx].sz / totalSz)) * 90
+          : 30;
         var cm     = wdeg % 360;
         var delta  = ((LAND - tc - cm) % 360 + 360) % 360;
         var target = wdeg + (5 + Math.floor(Math.random() * 4)) * 360 + delta;
