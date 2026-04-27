@@ -736,8 +736,9 @@
       })();
 
       var isOverlay = phase === 'boon_select' || phase === 'game_over' || phase === 'victory';
-      var totalBoons = BOONS.length + 1; // +1 for the doom secret
-      var seenBoons  = BOONS.filter(function(b) { return collection.has(b.id); }).length + (collection.has('doom_unlock') ? 1 : 0);
+      var doomUnlocked = collection.has('doom_unlock');
+      var totalBoons = BOONS.length + (doomUnlocked ? 1 : 0);
+      var seenBoons  = BOONS.filter(function(b) { return collection.has(b.id); }).length + (doomUnlocked ? 1 : 0);
 
       // Divider-suppression: skip the stroke between two adjacent same-type tiles when
       // the smaller tile's outer arc is < DIVIDER_SKIP_PX screen-pixels.
@@ -1279,24 +1280,25 @@
                         </div>
                       );
                     });
-                    var doomUnlocked = collection.has('doom_unlock');
-                    items.push(
-                      <div
-                        key="doom_unlock"
-                        className="boon-grid-item"
-                        style={{
-                          border: '1px solid ' + (doomUnlocked ? '#CC101088' : '#1c1c1c'),
-                          background: doomUnlocked ? 'rgba(180,16,16,.08)' : '#080808',
-                        }}
-                      >
-                        <div className="boon-grid-rarity" style={{ color: doomUnlocked ? '#CC1010' : '#2a2a2a' }}>
-                          {doomUnlocked ? 'doom' : '???'}
+                    if (collection.has('doom_unlock')) {
+                      items.push(
+                        <div
+                          key="doom_unlock"
+                          className="boon-grid-item"
+                          style={{
+                            border: '1px solid #CC101088',
+                            background: 'rgba(180,16,16,.08)',
+                          }}
+                        >
+                          <div className="boon-grid-rarity" style={{ color: '#CC1010' }}>
+                            doom
+                          </div>
+                          <div className="boon-grid-name" style={{ color: '#ccc', fontWeight: 600 }}>
+                            DOOM
+                          </div>
                         </div>
-                        <div className="boon-grid-name" style={{ color: doomUnlocked ? '#ccc' : '#2a2a2a', fontWeight: doomUnlocked ? 600 : 400 }}>
-                          {doomUnlocked ? 'DOOM' : '???'}
-                        </div>
-                      </div>
-                    );
+                      );
+                    }
                     return items;
                   })()}
                 </div>
