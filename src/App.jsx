@@ -15,8 +15,6 @@ var DIVIDER_SKIP_PX  = 3;   // screen-pixels at the outer rim before a divider i
 var SVG_RENDER_PX    = 370; // rendered SVG width in screen-pixels
 var SVG_VIEWBOX      = 420; // SVG viewBox width in SVG units
 var MERGE_THRESHOLD_DEG = DIVIDER_SKIP_PX * 180 * SVG_VIEWBOX / (R * Math.PI * SVG_RENDER_PX);
-// Display switches to scientific notation above this tile count (100 trillion).
-var SCIENTIFIC_NOTATION_THRESHOLD = 1e14;
 
 function formatWinPct(frac) {
   return (Math.round(frac * 1000) / 10) + '% WIN';
