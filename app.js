@@ -486,25 +486,30 @@
             setPhase('doom_approaches');
             t3.current = setTimeout(function() { setPhase('idle'); }, 1900);
           } else if (endlessSpin >= 3) {
-            var shownPP = postPickBoons.filter(function(b) { return b.effect !== 'add_win'; });
-            var gMap = {}, gOrder = [];
-            shownPP.forEach(function(b) {
-              var key = b.group || b.id;
-              if (!gMap[key]) { gMap[key] = []; gOrder.push(key); }
-              gMap[key].push(b);
-            });
-            var nonDoom = gOrder.filter(function(k) { return doomGroupKeys.indexOf(k) === -1; });
-            if (nonDoom.length > 0) {
-              var vKey = nonDoom[Math.floor(Math.random() * nonDoom.length)];
-              var vBoons = gMap[vKey];
-              setDoomRevealGroup({ groupKey: vKey, boons: vBoons, first: vBoons[0] });
-              setPhase('doom_reveal');
-              var newDoomKeys = doomGroupKeys.concat([vKey]);
-              t3.current = setTimeout(function() {
-                setDoomGroupKeys(newDoomKeys);
-                setDoomRevealGroup(null);
+            var doomChance = Math.min(0.95, 0.33 + (endlessSpin - 3) * 0.02);
+            if (Math.random() < doomChance) {
+              var shownPP = postPickBoons.filter(function(b) { return b.effect !== 'add_win'; });
+              var gMap = {}, gOrder = [];
+              shownPP.forEach(function(b) {
+                var key = b.group || b.id;
+                if (!gMap[key]) { gMap[key] = []; gOrder.push(key); }
+                gMap[key].push(b);
+              });
+              var nonDoom = gOrder.filter(function(k) { return doomGroupKeys.indexOf(k) === -1; });
+              if (nonDoom.length > 0) {
+                var vKey = nonDoom[Math.floor(Math.random() * nonDoom.length)];
+                var vBoons = gMap[vKey];
+                setDoomRevealGroup({ groupKey: vKey, boons: vBoons, first: vBoons[0] });
+                setPhase('doom_reveal');
+                var newDoomKeys = doomGroupKeys.concat([vKey]);
+                t3.current = setTimeout(function() {
+                  setDoomGroupKeys(newDoomKeys);
+                  setDoomRevealGroup(null);
+                  setPhase('idle');
+                }, 3500);
+              } else {
                 setPhase('idle');
-              }, 3500);
+              }
             } else {
               setPhase('idle');
             }
