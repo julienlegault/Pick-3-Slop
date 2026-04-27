@@ -1,4 +1,14 @@
-import { CX, CY, R, slicePath } from '../logic.js';
+import {
+  CX, CY, R, slicePath,
+  PROB_DISPLAY_THRESHOLD, buildLayout, calcAngles,
+  isVirtWheel, virtTotalCount,
+} from '../logic.js';
+
+// Divider-suppression constants (suppress thin slices at the rim)
+var DIVIDER_SKIP_PX  = 3;
+var SVG_RENDER_PX    = 370;
+var SVG_VIEWBOX      = 420;
+var MERGE_THRESHOLD_DEG = DIVIDER_SKIP_PX * 180 * SVG_VIEWBOX / (R * Math.PI * SVG_RENDER_PX);
 
 function tileColor(type) {
   return type === 'win' ? '#d4d4d4' : '#1e1e1e';
@@ -12,19 +22,64 @@ function formatTileCount(n) {
 
 // Wheel — the spinning SVG wheel and its container.
 // Props:
+//   tiles         current tile array
+//   boons         current boon array (for layout)
+//   flippedTiles  array of tile IDs currently animating a win-overtake flip
+//   gl            growth level (tile counter shown at gl ≥ 3)
 //   wdeg          current rotation in degrees
 //   anim          whether the CSS spin transition is active
-//   probWinFrac   null or a 0–1 fraction used for the two-sector probabilistic display (gl ≥ PROB_DISPLAY_THRESHOLD)
-//   renderGroups  pre-computed merged tile groups (empty when probWinFrac is active)
-//   dl            display layout (tile descriptors with type/id/sz)
-//   da            display angles (start/end degrees per tile)
-//   flippedMap    { [tileId]: true } for tiles currently animating a win-overtake flip
-//   gl            growth level (tile counter shown at gl ≥ 3)
-//   totalTileCount total tile count to display in the counter
 //   phase         current game phase (controls tabIndex)
 //   onWheelClick  click handler for the container
 //   onWheelKeyDown keyDown handler for the container
-export function Wheel({ wdeg, anim, probWinFrac, renderGroups, dl, da, flippedMap, gl, totalTileCount, phase, onWheelClick, onWheelKeyDown }) {
+export function Wheel({ tiles, boons, flippedTiles, gl, wdeg, anim, phase, onWheelClick, onWheelKeyDown }) {
+  var dl = buildLayout(tiles, boons, false);
+  var da = calcAngles(dl);
+
+  var flippedMap = {};
+  flippedTiles.forEach(function(id) { flippedMap[id] = true; });
+
+  var isVirt = isVirtWheel(tiles);
+  var totalTileCount = isVirt ? virtTotalCount(tiles) : tiles.length;
+
+  var probWinFrac = null;
+  if (gl >= PROB_DISPLAY_THRESHOLD) {
+    var totalSz = dl.reduce(function(s, t) { return s + t.sz; }, 0);
+    var winSz = dl.reduce(function(s, t) { return s + (t.type === 'win' ? t.sz : 0); }, 0);
+    probWinFrac = totalSz > 0 ? winSz / totalSz : 0.5;
+  }
+
+  var renderGroups = probWinFrac !== null ? [] : (function() {
+    var n = dl.length;
+    if (n === 0) return [];
+    var tiny = dl.map(function(t, i) { return (da[i].end - da[i].start) < MERGE_THRESHOLD_DEG; });
+    var groups = [];
+    var i = 0;
+    while (i < n) {
+      var type = dl[i].type;
+      var items = [i];
+      var j = i + 1;
+      while (j < n && dl[j].type === type && (tiny[j - 1] || tiny[j])) {
+        items.push(j);
+        j++;
+      }
+      groups.push({ items: items, startAngle: da[items[0]].start, endAngle: da[items[items.length - 1]].end, type: type });
+      i = j;
+    }
+    // Circular merge: if the last group and first group are same type with a tiny boundary, merge them.
+    if (groups.length >= 2) {
+      var first = groups[0], last = groups[groups.length - 1];
+      if (first.type === last.type && (tiny[last.items[last.items.length - 1]] || tiny[first.items[0]])) {
+        groups[0] = {
+          items: last.items.concat(first.items),
+          startAngle: last.startAngle,
+          endAngle: first.endAngle + 360, // wrap past 360° — slicePath() handles this via trig periodicity in polar()
+          type: first.type,
+        };
+        groups.splice(groups.length - 1, 1);
+      }
+    }
+    return groups;
+  })();
   return (
     <div
       className="wheel-wrap"
