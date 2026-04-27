@@ -337,16 +337,19 @@
         // After each boon pick in endless mode, reveal one new doom group when applicable
         // (matches triggerEndlessDoomThenIdle logic in app.js)
         if (isEndless && endlessSpin >= 3) {
-          var gKeys = [], gSeen = {};
-          applied.boons.forEach(function(b) {
-            if (b.effect === 'add_win') return;
-            var key = b.group || b.id;
-            if (!gSeen[key]) { gSeen[key] = true; gKeys.push(key); }
-          });
-          var nonDoom = gKeys.filter(function(k) { return doomGroupKeys.indexOf(k) === -1; });
-          if (nonDoom.length > 0) {
-            var vKey = nonDoom[Math.floor(Math.random() * nonDoom.length)];
-            doomGroupKeys = doomGroupKeys.concat([vKey]);
+          var doomChance = Math.min(0.95, 0.33 + (endlessSpin - 3) * 0.02);
+          if (Math.random() < doomChance) {
+            var gKeys = [], gSeen = {};
+            applied.boons.forEach(function(b) {
+              if (b.effect === 'add_win') return;
+              var key = b.group || b.id;
+              if (!gSeen[key]) { gSeen[key] = true; gKeys.push(key); }
+            });
+            var nonDoom = gKeys.filter(function(k) { return doomGroupKeys.indexOf(k) === -1; });
+            if (nonDoom.length > 0) {
+              var vKey = nonDoom[Math.floor(Math.random() * nonDoom.length)];
+              doomGroupKeys = doomGroupKeys.concat([vKey]);
+            }
           }
         }
 
