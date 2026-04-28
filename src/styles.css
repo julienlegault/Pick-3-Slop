@@ -628,7 +628,32 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   border-right: 6px solid transparent;
 }
 
-/* ── Menu modal ───────────────────────────────────────────────────────── */
+/* ── Collection boon tooltip ──────────────────────────────────────────── */
+.collection-boon-tip {
+  position: fixed;
+  width: 190px;
+  padding: 10px 13px;
+  border-radius: 4px;
+  background: #1a1a1a;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 4px 24px rgba(0,0,0,.8);
+  animation: fu .15s ease;
+}
+.collection-boon-tip .boon-tip-rarity,
+.collection-boon-tip .boon-tip-name,
+.collection-boon-tip .boon-tip-desc { display: block; }
+.tip-arrow-up {
+  position: absolute;
+  top: -7px;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: none;
+}
 .menu-overlay {
   position: fixed;
   inset: 0;
