@@ -750,7 +750,6 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: 14px 12px 38px;
   user-select: none;
 }
