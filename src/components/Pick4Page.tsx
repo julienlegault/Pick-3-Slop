@@ -344,19 +344,23 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
 
             {phase !== 'idle' && phase !== 'choose2' && (
               <div className={'pick4-card-wrapper' + (phase === 'drawing' ? ' pick4-card-flying' : '')}>
-                <div className={
-                  'pick4-card-inner'
-                  + (phase === 'drawing'   ? ' pick4-card-flipping' : '')
-                  + (phase !== 'drawing'   ? ' pick4-card-flipped'  : '')
-                }>
-                  <div className="pick4-card-face pick4-card-back" />
-                  <div className={
-                    'pick4-card-face pick4-card-front '
-                    + (isSaved && savedAnimActive ? 'pick4-card-win' : (currentCard === 'win' ? 'pick4-card-win' : 'pick4-card-lose'))
-                  }>
-                    {isSaved && savedAnimActive ? 'SAVED!' : (currentCard === 'win' ? 'WIN' : 'LOSE')}
-                  </div>
-                </div>
+                {(function() {
+                  var showSaved  = isSaved && savedAnimActive;
+                  var cardClass  = (showSaved || currentCard === 'win') ? 'pick4-card-win' : 'pick4-card-lose';
+                  var cardText   = showSaved ? 'SAVED!' : (currentCard === 'win' ? 'WIN' : 'LOSE');
+                  return (
+                    <div className={
+                      'pick4-card-inner'
+                      + (phase === 'drawing' ? ' pick4-card-flipping' : '')
+                      + (phase !== 'drawing' ? ' pick4-card-flipped'  : '')
+                    }>
+                      <div className="pick4-card-face pick4-card-back" />
+                      <div className={'pick4-card-face pick4-card-front ' + cardClass}>
+                        {cardText}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {/* Saved animation overlay */}
                 {isSaved && savedAnimActive && (
                   <div className="pick4-saved-overlay">SAVED!</div>
