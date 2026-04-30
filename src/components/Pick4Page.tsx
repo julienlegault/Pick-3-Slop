@@ -8,11 +8,17 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   const [drawState, setDrawState] = useState<'idle' | 'drawing' | 'revealed'>('idle');
   const [result, setResult] = useState<'win' | 'lose' | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [drawCount, setDrawCount] = useState(0);
+  const [winCount, setWinCount] = useState(0);
+
+  const level = Math.floor(winCount / 3) + 1;
 
   function handleDraw() {
     if (drawState !== 'idle') return;
     var outcome: 'win' | 'lose' = Math.random() < 0.5 ? 'win' : 'lose';
     setResult(outcome);
+    setDrawCount(function(c) { return c + 1; });
+    if (outcome === 'win') setWinCount(function(c) { return c + 1; });
     setDrawState('drawing');
     // fly animation: 0.55s, flip animation: 0.4s delayed by 0.5s → total ~0.95s
     setTimeout(function() { setDrawState('revealed'); }, 950);
@@ -47,12 +53,17 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
         </div>
       )}
 
-      <h1 className="pick4-title">
-        PICK&nbsp;
-        <span className="pick4-three">3</span>
-        <span className="pick4-four">4</span>
-        &nbsp;SLOP
-      </h1>
+      <div className="pick4-header">
+        <h1 className="pick4-title">
+          PICK&nbsp;
+          <span className="pick4-three">3</span>
+          <span className="pick4-four">4</span>
+          &nbsp;SLOP
+        </h1>
+        <div className="pick4-subtitle">
+          DRAW {drawCount} &nbsp;|&nbsp; {winCount} WINS &nbsp;|&nbsp; LVL {level}
+        </div>
+      </div>
 
       <div className="pick4-arena">
         {/* Deck of stacked face-down cards */}
