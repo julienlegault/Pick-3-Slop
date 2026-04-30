@@ -7,6 +7,7 @@ import { PhaseBanner } from './components/PhaseBanner';
 import { GameOverlay } from './components/GameOverlay';
 import { CollectionModal } from './components/CollectionModal';
 import { MenuModal } from './components/MenuModal';
+import { Pick4Page } from './components/Pick4Page';
 
 function formatWinPct(frac) {
   return (Math.round(frac * 1000) / 10) + '% WIN';
@@ -36,6 +37,13 @@ export function App() {
   var doomUnlocked   = collection.has('doom_unlock');
   var totalBoons     = BOONS.length + (doomUnlocked ? 1 : 0);
   var seenBoons      = BOONS.filter(function(b) { return collection.has(b.id); }).length + (doomUnlocked ? 1 : 0);
+
+  // Pick 4 Slop: triggered at any run end (win, loss, or endless) when the
+  // player's collection contains every non-doom boon.
+  var allBoonsCollected = BOONS.length > 0 && BOONS.every(function(b) { return collection.has(b.id); });
+  if ((phase === 'game_over' || phase === 'victory') && allBoonsCollected) {
+    return <Pick4Page restart={restart} />;
+  }
 
   return (
     <div

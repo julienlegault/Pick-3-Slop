@@ -720,3 +720,192 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   transition: color .15s, border-color .15s;
 }
 .menu-btn-close:hover { color: #888; border-color: #333; }
+
+/* ── Pick 4 Slop ─────────────────────────────────────────────────────── */
+@keyframes pick4Fly {
+  from { transform: translateX(-150px); }
+  to   { transform: translateX(0); }
+}
+@keyframes pick4Flip {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(180deg); }
+}
+
+.pick4-root {
+  min-height: 100vh;
+  background: #0f0f0f;
+  color: #e0e0e0;
+  font-family: 'Cinzel', serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 12px 38px;
+  user-select: none;
+}
+
+.pick4-title {
+  font-size: clamp(1.25rem, 3.2vw, 1.72rem);
+  letter-spacing: .28em;
+  color: #D4AF37;
+  margin-bottom: 52px;
+  font-weight: 700;
+  text-shadow: 0 0 24px rgba(212,175,55,.22);
+}
+.pick4-three {
+  text-decoration: line-through;
+  opacity: 0.4;
+  margin-right: 2px;
+}
+.pick4-four {
+  color: #ffffff;
+  text-shadow: 0 0 18px rgba(255,255,255,.35);
+}
+
+/* Arena: deck + slot side by side */
+.pick4-arena {
+  display: flex;
+  align-items: center;
+  gap: 50px;
+  margin-bottom: 36px;
+}
+
+/* Shared card size */
+.pick4-deck,
+.pick4-slot {
+  width: 100px;
+  height: 140px;
+}
+
+/* ── Deck (stacked face-down cards) ── */
+.pick4-deck {
+  position: relative;
+}
+.pick4-deck-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+  border: 2px solid #D4AF37;
+  box-shadow: 0 4px 14px rgba(0,0,0,.65);
+}
+.pick4-deck-card::after {
+  content: '♦';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: rgba(212,175,55,.16);
+}
+.pick4-deck-card--back { transform: translate(-4px, -4px); }
+.pick4-deck-card--mid  { transform: translate(-2px, -2px); }
+/* top card stays at origin */
+
+/* ── Empty slot ── */
+.pick4-slot {
+  position: relative;
+  perspective: 900px;
+}
+.pick4-slot-empty {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  border: 2px dashed #2a2a2a;
+}
+
+/* ── Flying + flipping drawn card ── */
+.pick4-card-wrapper {
+  width: 100px;
+  height: 140px;
+}
+.pick4-card-wrapper.pick4-card-flying {
+  animation: pick4Fly 0.55s ease-out forwards;
+}
+
+.pick4-card-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+}
+.pick4-card-inner.pick4-card-flipping {
+  /* starts 0.5 s after the fly animation so the card arrives before it flips */
+  animation: pick4Flip 0.4s ease-in-out 0.5s forwards;
+}
+.pick4-card-inner.pick4-card-flipped {
+  transform: rotateY(180deg);
+}
+
+/* Shared face styles */
+.pick4-card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Back face */
+.pick4-card-back {
+  background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+  border: 2px solid #D4AF37;
+  box-shadow: 0 4px 14px rgba(0,0,0,.65);
+}
+.pick4-card-back::after {
+  content: '♦';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: rgba(212,175,55,.16);
+}
+
+/* Front face — always rotated 180° so it appears when card is flipped */
+.pick4-card-front {
+  transform: rotateY(180deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: .22em;
+}
+.pick4-card-win {
+  background: linear-gradient(135deg, #0a2a14 0%, #051408 100%);
+  border: 2px solid #22C55E;
+  color: #22C55E;
+  text-shadow: 0 0 18px rgba(34,197,94,.5);
+  box-shadow: 0 0 24px rgba(34,197,94,.2);
+}
+.pick4-card-lose {
+  background: linear-gradient(135deg, #2a0a0a 0%, #140505 100%);
+  border: 2px solid #CC1010;
+  color: #CC1010;
+  text-shadow: 0 0 18px rgba(204,16,16,.5);
+  box-shadow: 0 0 24px rgba(204,16,16,.2);
+}
+
+/* ── Draw button ── */
+.pick4-draw-btn,
+.pick4-play-again-btn {
+  padding: 9px 42px;
+  background: transparent;
+  border: 2px solid #D4AF37;
+  color: #D4AF37;
+  font-size: .82rem;
+  font-family: 'Cinzel', serif;
+  letter-spacing: .4em;
+  cursor: pointer;
+  transition: background .15s, box-shadow .15s;
+  box-shadow: 0 0 14px rgba(212,175,55,.1);
+  touch-action: manipulation;
+}
+.pick4-draw-btn:hover,
+.pick4-play-again-btn:hover {
+  background: rgba(212,175,55,.1);
+  box-shadow: 0 0 26px rgba(212,175,55,.3);
+}
