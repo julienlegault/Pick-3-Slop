@@ -7,13 +7,16 @@ import { PhaseBanner } from './components/PhaseBanner';
 import { GameOverlay } from './components/GameOverlay';
 import { CollectionModal } from './components/CollectionModal';
 import { MenuModal } from './components/MenuModal';
-import { Pick4Page } from './components/Pick4Page';
+
+interface AppProps {
+  navigateToPick4: () => void;
+}
 
 function formatWinPct(frac) {
   return (Math.round(frac * 1000) / 10) + '% WIN';
 }
 
-export function App() {
+export function App({ navigateToPick4 }: AppProps) {
   var state = useGameState();
   var {
     tiles, boons, sc, gl, phase, wdeg, anim, rtile, choices,
@@ -37,13 +40,7 @@ export function App() {
   var doomUnlocked   = collection.has('doom_unlock');
   var totalBoons     = BOONS.length + (doomUnlocked ? 1 : 0);
   var seenBoons      = BOONS.filter(function(b) { return collection.has(b.id); }).length + (doomUnlocked ? 1 : 0);
-
-  // Pick 4 Slop: triggered at any run end (win, loss, or endless) when the
-  // player's collection contains every non-doom boon.
   var allBoonsCollected = BOONS.length > 0 && BOONS.every(function(b) { return collection.has(b.id); });
-  if ((phase === 'game_over' || phase === 'victory') && allBoonsCollected) {
-    return <Pick4Page restart={restart} />;
-  }
 
   return (
     <div
@@ -51,11 +48,9 @@ export function App() {
       style={{ cursor: phase === 'spinning' || phase === 'reveal' ? 'pointer' : 'default' }}
       onClick={handleInteract}
     >
-      {phase !== 'game_over' && phase !== 'victory' && (
-        <button className="btn-menu" onClick={function(e) { e.stopPropagation(); setShowMenu(true); }} aria-label="Open menu">
-          &#8801;
-        </button>
-      )}
+      <button className="btn-menu" onClick={function(e) { e.stopPropagation(); setShowMenu(true); }} aria-label="Open menu">
+        &#8801;
+      </button>
 
       <div className={'app-main' + (isOverlay ? ' blurred' : '')}>
         <div className="app-header">
@@ -102,7 +97,8 @@ export function App() {
         seenBoons={seenBoons} totalBoons={totalBoons} setShowCollection={setShowCollection} />
 
       <MenuModal showMenu={showMenu} setShowMenu={setShowMenu} giveUp={giveUp}
-        setShowCollection={setShowCollection} seenBoons={seenBoons} totalBoons={totalBoons} />
+        setShowCollection={setShowCollection} seenBoons={seenBoons} totalBoons={totalBoons}
+        pick4Unlocked={allBoonsCollected} navigateToPick4={navigateToPick4} />
     </div>
   );
 }

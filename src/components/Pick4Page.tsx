@@ -1,12 +1,13 @@
 import { useState } from 'react';
 
 interface Pick4PageProps {
-  restart: () => void;
+  navigateToPick3: () => void;
 }
 
-export function Pick4Page({ restart }: Pick4PageProps) {
+export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   const [drawState, setDrawState] = useState<'idle' | 'drawing' | 'revealed'>('idle');
   const [result, setResult] = useState<'win' | 'lose' | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
 
   function handleDraw() {
     if (drawState !== 'idle') return;
@@ -17,8 +18,35 @@ export function Pick4Page({ restart }: Pick4PageProps) {
     setTimeout(function() { setDrawState('revealed'); }, 950);
   }
 
+  function handlePlayAgain() {
+    setDrawState('idle');
+    setResult(null);
+  }
+
   return (
     <div className="pick4-root">
+      <button
+        className="btn-menu"
+        onClick={function(e) { e.stopPropagation(); setShowMenu(true); }}
+        aria-label="Open menu"
+      >
+        &#8801;
+      </button>
+
+      {showMenu && (
+        <div className="menu-overlay" onClick={function(e) { e.stopPropagation(); setShowMenu(false); }}>
+          <div className="menu-panel" onClick={function(e) { e.stopPropagation(); }}>
+            <div className="menu-title">MENU</div>
+            <button className="menu-btn menu-btn-pick3" onClick={function(e) { e.stopPropagation(); navigateToPick3(); }}>
+              ← PICK 3 SLOP
+            </button>
+            <button className="menu-btn-close" onClick={function(e) { e.stopPropagation(); setShowMenu(false); }}>
+              CLOSE
+            </button>
+          </div>
+        </div>
+      )}
+
       <h1 className="pick4-title">
         PICK&nbsp;
         <span className="pick4-three">3</span>
@@ -59,7 +87,7 @@ export function Pick4Page({ restart }: Pick4PageProps) {
       )}
 
       {drawState === 'revealed' && (
-        <button className="pick4-play-again-btn" onClick={restart}>PLAY AGAIN</button>
+        <button className="pick4-play-again-btn" onClick={handlePlayAgain}>PLAY AGAIN</button>
       )}
     </div>
   );

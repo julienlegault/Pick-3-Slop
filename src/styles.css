@@ -706,6 +706,17 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   margin-bottom: 18px;
 }
 .menu-btn-collection:hover { color: #D4AF37; border-color: #D4AF37; }
+.menu-btn-pick4 {
+  border: 1px solid #D4AF37;
+  color: #D4AF37;
+}
+.menu-btn-pick4:hover { background: rgba(212,175,55,.12) !important; }
+.menu-btn-pick3 {
+  border: 1px solid #D4AF37;
+  color: #D4AF37;
+  margin-bottom: 18px;
+}
+.menu-btn-pick3:hover { background: rgba(212,175,55,.12) !important; }
 .menu-btn-close {
   display: block;
   margin: 0 auto;
