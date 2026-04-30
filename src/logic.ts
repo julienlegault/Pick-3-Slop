@@ -11,7 +11,7 @@ export {
 
 export { rarityMult } from './utils';
 
-export { BOONS, TOTAL_W, TEMPLATE_MAP } from './boons/templates';
+export { BOONS, TOTAL_W, TEMPLATE_MAP, getTemplateRangeDesc } from './boons/templates';
 
 export {
   makeIid, cloneBoon, instantiateTemplate,

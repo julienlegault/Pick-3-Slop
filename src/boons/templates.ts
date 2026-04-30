@@ -373,3 +373,33 @@ addMany(numericBoon(
 ));
 
 export var TOTAL_W = BOONS.reduce(function(s, b) { return s + b.w; }, 0);
+
+/**
+ * Returns a description string for a boon template suitable for the collection
+ * screen.  For boons with randomised values, each numeric value is replaced
+ * with the "min–max" range (e.g. "5–10%") instead of a single rolled value.
+ * Fixed-value boons return their normal `desc`.
+ */
+export function getTemplateRangeDesc(template: any): string {
+  if (!template.randomValue || !template.valueRanges || !template.descFn) {
+    return template.desc || '';
+  }
+  var minVals: Record<string, number> = {};
+  var maxVals: Record<string, number> = {};
+  Object.keys(template.valueRanges).forEach(function(k) {
+    var rg = template.valueRanges[k];
+    minVals[k] = rg.min;
+    maxVals[k] = rg.max;
+  });
+  var minDesc: string = template.descFn(template.rarity, minVals);
+  var maxDesc: string = template.descFn(template.rarity, maxVals);
+  if (minDesc === maxDesc) return minDesc;
+  // Split both descriptions on numeric tokens, then merge differing numbers
+  // into "min–max" ranges (e.g. "5" vs "10" becomes "5–10").
+  var minParts = minDesc.split(/(\d+)/);
+  var maxParts = maxDesc.split(/(\d+)/);
+  if (minParts.length !== maxParts.length) return minDesc;
+  return minParts.map(function(t, i) {
+    return t !== maxParts[i] ? t + '\u2013' + maxParts[i] : t;
+  }).join('');
+}
