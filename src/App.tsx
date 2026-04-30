@@ -28,13 +28,6 @@ export function App() {
   } = state;
 
   var dl             = buildLayout(tiles, boons, false);
-
-  // Pick 4 Slop: triggered on a normal victory when every boon has been collected.
-  var allBoonsCollected = totalBoons > 0 && seenBoons === totalBoons;
-  if (phase === 'victory' && !victoryIsGameOver && allBoonsCollected) {
-    return <Pick4Page restart={restart} />;
-  }
-
   var isVirt         = isVirtWheel(tiles);
   var wins           = isVirt ? virtGetCount(tiles, 'win') : tiles.filter(function(t) { return t.type === 'win'; }).length;
   var totalTileCount = isVirt ? virtTotalCount(tiles) : tiles.length;
@@ -44,6 +37,13 @@ export function App() {
   var doomUnlocked   = collection.has('doom_unlock');
   var totalBoons     = BOONS.length + (doomUnlocked ? 1 : 0);
   var seenBoons      = BOONS.filter(function(b) { return collection.has(b.id); }).length + (doomUnlocked ? 1 : 0);
+
+  // Pick 4 Slop: triggered at any run end (win, loss, or endless) when the
+  // player's collection contains every non-doom boon.
+  var allBoonsCollected = BOONS.length > 0 && BOONS.every(function(b) { return collection.has(b.id); });
+  if ((phase === 'game_over' || phase === 'victory') && allBoonsCollected) {
+    return <Pick4Page restart={restart} />;
+  }
 
   return (
     <div
