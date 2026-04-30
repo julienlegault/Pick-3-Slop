@@ -7,6 +7,7 @@ import { PhaseBanner } from './components/PhaseBanner';
 import { GameOverlay } from './components/GameOverlay';
 import { CollectionModal } from './components/CollectionModal';
 import { MenuModal } from './components/MenuModal';
+import { Pick4Page } from './components/Pick4Page';
 
 function formatWinPct(frac) {
   return (Math.round(frac * 1000) / 10) + '% WIN';
@@ -27,6 +28,13 @@ export function App() {
   } = state;
 
   var dl             = buildLayout(tiles, boons, false);
+
+  // Pick 4 Slop: triggered on a normal victory when every boon has been collected.
+  var allBoonsCollected = totalBoons > 0 && seenBoons === totalBoons;
+  if (phase === 'victory' && !victoryIsGameOver && allBoonsCollected) {
+    return <Pick4Page restart={restart} />;
+  }
+
   var isVirt         = isVirtWheel(tiles);
   var wins           = isVirt ? virtGetCount(tiles, 'win') : tiles.filter(function(t) { return t.type === 'win'; }).length;
   var totalTileCount = isVirt ? virtTotalCount(tiles) : tiles.length;
