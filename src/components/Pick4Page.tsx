@@ -9,7 +9,6 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   const [result, setResult] = useState<'win' | 'lose' | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [drawCount, setDrawCount] = useState(0);
-  const [winCount, setWinCount] = useState(0);
 
   const level = Math.floor(winCount / 3) + 1;
 
@@ -18,7 +17,6 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     var outcome: 'win' | 'lose' = Math.random() < 0.5 ? 'win' : 'lose';
     setResult(outcome);
     setDrawCount(function(c) { return c + 1; });
-    if (outcome === 'win') setWinCount(function(c) { return c + 1; });
     setDrawState('drawing');
     // fly animation: 0.55s, flip animation: 0.4s delayed by 0.5s → total ~0.95s
     setTimeout(function() { setDrawState('revealed'); }, 950);
@@ -61,7 +59,7 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
           &nbsp;SLOP
         </h1>
         <div className="pick4-subtitle">
-          DRAW {drawCount} &nbsp;|&nbsp; {winCount} WINS &nbsp;|&nbsp; LVL {level}
+          DRAW {drawCount} &nbsp;|&nbsp; LVL {level}
         </div>
       </div>
 
