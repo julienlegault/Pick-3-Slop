@@ -20,7 +20,9 @@ export function instantiateTemplate(tpl) {
 export function boonNumeric(boon, key) {
   var val = boon[key] === undefined ? 0 : boon[key];
   if (!boon.randomValue) return val;
-  var fb = boon.flatBonus || 0;
+  // Only apply flatBonus for keys explicitly listed in valueAuraKeys.
+  var auraKeys = boon.valueAuraKeys;
+  var fb = (boon.flatBonus && auraKeys && auraKeys.indexOf(key) !== -1) ? boon.flatBonus : 0;
   if (typeof val !== 'number') return val;
   if (key === 'charges' || key === 'amount') return Math.max(MIN_STACKABLE_COUNT, Math.round(val + fb * FLAT_BONUS_STACK_TO_COUNT));
   var capKey = key + 'Cap';
@@ -58,7 +60,7 @@ export function getStackedDesc(groupBoons) {
     return 'On a loss: ' + pct(combP2) + '% combined chance to win (\xd7' + n + ' copies, fragile).';
   }
   if (effect === 'rescue_multiplicative') {
-    vals.chance = 1 - groupBoons.reduce(function(acc, b) { return acc * (1 - boonNumeric(b, 'chance')); }, 1);
+    vals.chance = Math.min(1 - groupBoons.reduce(function(acc, b) { return acc * (1 - boonNumeric(b, 'chance')); }, 1), MAX_PERCENTAGE);
     return 'On a loss: combined ' + pct(vals.chance) + '% multiplicative rescue chance (\xd7' + n + ' copies).';
   }
   if (effect === 'rescue_additive') {
@@ -71,6 +73,11 @@ export function getStackedDesc(groupBoons) {
     // so combined = (1+a)(1+b)...-1, not a simple sum.
     vals.winGrow = groupBoons.reduce(function(acc, b) { return (acc + 1) * (1 + boonNumeric(b, 'winGrow')) - 1; }, 0);
     vals.loseShrink = 1 - groupBoons.reduce(function(acc, b) { return acc * (1 - boonNumeric(b, 'loseShrink')); }, 1);
+    return b0.descFn(b0.rarity, vals);
+  }
+
+  if (effect === 'preserve_one_time') {
+    vals.chance = Math.min(groupBoons.reduce(function(acc, b) { return acc + boonNumeric(b, 'chance'); }, 0), MAX_PERCENTAGE);
     return b0.descFn(b0.rarity, vals);
   }
 

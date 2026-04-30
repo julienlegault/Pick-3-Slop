@@ -1,5 +1,4 @@
 import { randFloat, randInt, pct, rarityRange } from '../utils';
-import { WIN_AREA_BOON_CAPS, WIN_MERGE_BOON_CAPS } from '../constants';
 
 export var TEMPLATE_MAP = {};
 export function boonTemplate(def) {
@@ -72,7 +71,9 @@ addMany(numericBoon(
     rare: { min: 0.20, max: 0.30, step: 0.01 },
     legendary: { min: 0.40, max: 0.50, step: 0.01 },
   }},
-  function(_, v) { return 'On a loss: ' + pct(v.chance) + '% chance to win instead. Copies trigger separately.'; }
+  function(_, v) { return 'On a loss: ' + pct(v.chance) + '% chance to win instead. Copies trigger separately.'; },
+  { valueAuraKeys: ['chance'] },
+  { chance: { uncommon: 0.10, rare: 0.30, legendary: 0.50 } }
 ));
 
 BOONS.push(boonTemplate({
@@ -103,7 +104,9 @@ addMany(numericBoon(
       legendary: { min: 0.90, max: 0.98, step: 0.01 },
     }
   },
-  function(_, v) { return 'On a loss: +' + pct(v.chance) + '% stacked rescue chance (additive), capped at ' + pct(v.cap) + '%.'; }
+  function(_, v) { return 'On a loss: +' + pct(v.chance) + '% stacked rescue chance (additive), capped at ' + pct(v.cap) + '%.'; },
+  { valueAuraKeys: ['chance'] },
+  { chance: { uncommon: 0.10, rare: 0.30, legendary: 0.50 } }
 ));
 
 addMany(numericBoon(
@@ -116,7 +119,8 @@ addMany(numericBoon(
     rare: { min: 0.20, max: 0.30, step: 0.01 },
     legendary: { min: 0.40, max: 0.50, step: 0.01 },
   }},
-  function(_, v) { return 'On a loss: this copy contributes ' + pct(v.chance) + '% multiplicative rescue chance.'; }
+  function(_, v) { return 'On a loss: this copy contributes ' + pct(v.chance) + '% multiplicative rescue chance.'; },
+  { valueAuraKeys: ['chance'] }
 ));
 
 addMany(numericBoon(
@@ -137,8 +141,7 @@ addMany(numericBoon(
     }
   },
   function(_, v) { return 'Win tiles +' + pct(v.winGrow) + '% size and lose tiles -' + pct(v.loseShrink) + '% size.'; },
-  null,
-  { winGrow: WIN_AREA_BOON_CAPS }
+  { valueAuraKeys: ['winGrow', 'loseShrink'] }
 ));
 
 ['common', 'uncommon', 'rare', 'legendary'].forEach(function(targetRarity) {
@@ -173,7 +176,7 @@ addMany(numericBoon(
     }
   },
   function(_, v) { return 'On a loss: ' + pct(v.chance) + '% chance to win, then ' + pct(v.breakChance) + '% chance this boon is consumed.'; },
-  { oneTimeTrigger: true }
+  { oneTimeTrigger: true, valueAuraKeys: ['chance'] }
 ));
 
 addMany(numericBoon(
@@ -262,8 +265,7 @@ addMany(numericBoon(
     legendary: { min: 0.15, max: 0.22, step: 0.01 },
   }},
   function(_, v) { return 'Adjacent win tiles grow by +' + pct(v.mergeGrow) + '% each spin.'; },
-  null,
-  { mergeGrow: WIN_MERGE_BOON_CAPS }
+  { valueAuraKeys: ['mergeGrow'] }
 ));
 
 addMany(numericBoon(
@@ -332,7 +334,9 @@ addMany(numericBoon(
     rare: { min: 0.20, max: 0.30, step: 0.01 },
     legendary: { min: 0.40, max: 0.50, step: 0.01 },
   }},
-  function(_, v) { return 'When picking a boon: ' + pct(v.chance) + '% chance to gain a free copy of that boon.'; }
+  function(_, v) { return 'When picking a boon: ' + pct(v.chance) + '% chance to gain a free copy of that boon.'; },
+  { valueAuraKeys: ['chance'] },
+  { chance: { uncommon: 0.10, rare: 0.30, legendary: 0.50 } }
 ));
 
 addMany(numericBoon(
@@ -345,7 +349,8 @@ addMany(numericBoon(
     rare: { min: 0.20, max: 0.30, step: 0.01 },
     legendary: { min: 0.40, max: 0.50, step: 0.01 },
   }},
-  function(_, v) { return 'One-time-use boons have ' + pct(v.chance) + '% chance to not be consumed.'; }
+  function(_, v) { return 'One-time-use boons have ' + pct(v.chance) + '% chance to not be consumed.'; },
+  { valueAuraKeys: ['chance'] }
 ));
 
 BOONS.push(boonTemplate({
