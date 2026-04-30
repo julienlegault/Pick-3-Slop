@@ -755,13 +755,29 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   user-select: none;
 }
 
+.pick4-header {
+  position: relative;
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 0;
+}
 .pick4-title {
   font-size: clamp(1.25rem, 3.2vw, 1.72rem);
   letter-spacing: .28em;
   color: #D4AF37;
-  margin-bottom: 52px;
+  margin: 0 0 4px;
   font-weight: 700;
   text-shadow: 0 0 24px rgba(212,175,55,.22);
+}
+.pick4-subtitle {
+  font-family: monospace;
+  font-size: .68rem;
+  color: #888;
+  letter-spacing: .32em;
+  margin-bottom: 52px;
 }
 .pick4-three {
   text-decoration: line-through;
