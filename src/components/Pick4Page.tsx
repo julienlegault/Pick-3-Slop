@@ -14,7 +14,7 @@ interface Pick4PageProps {
   navigateToPick3: () => void;
 }
 
-type Phase    = 'idle' | 'drawing' | 'revealed' | 'choose2' | 'shop' | 'game_over';
+type Phase    = 'idle' | 'drawing' | 'revealed' | 'choose2' | 'shop' | 'game_over' | 'eliminated';
 type CardType = 'win' | 'lose';
 
 export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
@@ -39,7 +39,8 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   var [choose2Cards, setChoose2Cards]   = useState<[CardType, CardType] | null>(null);
 
   // ── UI ────────────────────────────────────────────────────────────────
-  var [showMenu, setShowMenu] = useState(false);
+  var [showMenu, setShowMenu]         = useState(false);
+  var [showLevelUp, setShowLevelUp]   = useState(false);
 
   // ── Timer helpers ─────────────────────────────────────────────────────
   var timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -55,15 +56,15 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   // ── Derived state ─────────────────────────────────────────────────────
   var deckWins  = deck.filter(function(c) { return c === 'win';  }).length;
   var deckLoses = deck.filter(function(c) { return c === 'lose'; }).length;
-  var level     = Math.floor(winDrawCount / 3) + 1;
+  var level     = Math.floor(winDrawCount / 4) + 1;
   var isSaved   = baseCard === 'lose' && currentCard === 'win';
-  var isOverlay = phase === 'choose2' || phase === 'shop' || phase === 'game_over';
+  var isOverlay = phase === 'choose2' || phase === 'shop' || phase === 'game_over' || phase === 'eliminated';
 
   // ── Open shop ─────────────────────────────────────────────────────────
-  function openShop(curBoons: Pick4BoonInstance[], baseRerolls: number) {
+  function openShop(curBoons: Pick4BoonInstance[], baseRerolls: number, curLevel: number) {
     var hasEternalMarket = curBoons.some(function(b) { return b.effect === 'reroll_every_shop'; });
     var rerolls = baseRerolls + (hasEternalMarket ? 1 : 0);
-    setShopChoices(drawPick4BoonChoices(curBoons, SHOP_SIZE));
+    setShopChoices(drawPick4BoonChoices(curBoons, SHOP_SIZE, curLevel));
     setShopRerolls(rerolls);
     setPhase('shop');
   }
@@ -114,7 +115,8 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   function resolveCard(
     card: CardType,
     curBoons: Pick4BoonInstance[],
-    curShopRerolls: number
+    curShopRerolls: number,
+    curWinDrawCount: number
   ) {
     var result = applyDrawBoons(card, curBoons);
     setBaseCard(card);
@@ -124,16 +126,26 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setPhase('revealed');
 
     if (result.finalCard === 'win') {
-      setWinDrawCount(function(c) { return c + 1; });
-      if (result.savedBy50) {
+      var newWinCount = curWinDrawCount + 1;
+      setWinDrawCount(newWinCount);
+      var newLevel      = Math.floor(newWinCount / 4) + 1;
+      var isLevelUp     = newWinCount % 4 === 0;
+
+      if (isLevelUp) {
+        setShowLevelUp(true);
+        later(function() { setShowLevelUp(false); }, 1500);
+        later(function() { openShop(result.newBoons, curShopRerolls, newLevel); }, 1600);
+      } else if (result.savedBy50) {
         // Show lose face → flip to SAVED! → open shop
         later(function() { setSavedAnimActive(true); }, 700);
-        later(function() { openShop(result.newBoons, curShopRerolls); }, 1600);
+        later(function() { openShop(result.newBoons, curShopRerolls, newLevel); }, 1600);
       } else {
-        later(function() { openShop(result.newBoons, curShopRerolls); }, 500);
+        later(function() { openShop(result.newBoons, curShopRerolls, newLevel); }, 500);
       }
+    } else {
+      // Unprotected lose → game over
+      setPhase('eliminated');
     }
-    // If lose: player clicks NEXT to continue
   }
 
   // ── Draw ──────────────────────────────────────────────────────────────
@@ -147,10 +159,11 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setPhase('drawing');
 
     // Capture current state for use inside the timeout closures
-    var curDeck         = deck;
-    var curBoons        = boons;
-    var curShopRerolls  = shopRerolls;
-    var curDrawnHistory = drawnHistory;
+    var curDeck          = deck;
+    var curBoons         = boons;
+    var curShopRerolls   = shopRerolls;
+    var curDrawnHistory  = drawnHistory;
+    var curWinDrawCount  = winDrawCount;
 
     var hasOracle = curBoons.some(function(b) { return b.effect === 'draw_2_choose_1'; });
 
@@ -171,8 +184,13 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
       var drawnCard   = newDeck2.pop() as CardType;
       setDeck(newDeck2);
       setDrawnHistory(curDrawnHistory.concat(drawnCard));
+      // Set the card face content immediately so the front face already shows the correct WIN/LOSE
+      // text before the flip animation reveals it (~500ms in). resolveCard will overwrite this with
+      // the boon-processed result at 950ms; any difference (e.g. Aegis turning LOSE→WIN) will update
+      // the visible face right as the flip completes, which is the intended save-reveal behaviour.
+      setCurrentCard(drawnCard);
       later(function() {
-        resolveCard(drawnCard, curBoons, curShopRerolls);
+        resolveCard(drawnCard, curBoons, curShopRerolls, curWinDrawCount);
       }, 950);
     }
   }
@@ -183,20 +201,15 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     var chosen = choose2Cards[idx];
     setDrawnHistory(function(h) { return h.concat(chosen); });
     setChoose2Cards(null);
-    resolveCard(chosen, boons, shopRerolls);
+    resolveCard(chosen, boons, shopRerolls, winDrawCount);
   }
 
-  // ── Continue after a lose reveal ──────────────────────────────────────
-  function handleContinue() {
-    if (phase !== 'revealed') return;
-    clearTimers();
-    setSavedAnimActive(false);
-    setBaseCard(null);
-    setCurrentCard(null);
-    setPhase(deck.length === 0 ? 'game_over' : 'idle');
+  // ── Reroll the shop ───────────────────────────────────────────────────
+  function rerollShop() {
+    if (shopRerolls <= 0) return;
+    setShopRerolls(function(r) { return r - 1; });
+    setShopChoices(drawPick4BoonChoices(boons, SHOP_SIZE, level));
   }
-
-  // ── Pick a boon from the shop ─────────────────────────────────────────
   function pickBoon(boon: Pick4BoonTemplate) {
     var newDeck    = deck.slice();
     var newHistory = drawnHistory.slice();
@@ -263,13 +276,6 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setPhase('idle');
   }
 
-  // ── Reroll the shop ───────────────────────────────────────────────────
-  function rerollShop() {
-    if (shopRerolls <= 0) return;
-    setShopRerolls(function(r) { return r - 1; });
-    setShopChoices(drawPick4BoonChoices(boons, SHOP_SIZE));
-  }
-
   // ── Restart ───────────────────────────────────────────────────────────
   function handleRestart() {
     clearTimers();
@@ -285,6 +291,7 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setSavedAnimActive(false);
     setChoose2Cards(null);
     setShopChoices([]);
+    setShowLevelUp(false);
   }
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -370,12 +377,9 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
           </div>
         </div>
 
-        {/* Draw / Next buttons */}
+        {/* Draw button */}
         {phase === 'idle' && (
           <button className="pick4-draw-btn" onClick={handleDraw}>DRAW</button>
-        )}
-        {phase === 'revealed' && currentCard === 'lose' && !isSaved && (
-          <button className="pick4-draw-btn" onClick={handleContinue}>NEXT</button>
         )}
 
         {/* Boon stack */}
@@ -458,6 +462,30 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
         </div>
       )}
 
+      {/* ── Eliminated overlay (drew a lose card) ── */}
+      {phase === 'eliminated' && (
+        <div className="game-overlay" onClick={function(e) { e.stopPropagation(); }}>
+          <div className="game-over-panel">
+            <div className="eliminated-text">ELIMINATED</div>
+            <div className="spins-survived">{winDrawCount} WINS / {drawCount} DRAWS</div>
+            {boons.length > 0 && (
+              <div className="final-boons">
+                <div className="final-boons-label">FINAL BOON STACK</div>
+                <div className="final-boons-items">
+                  {boons.map(function(b) { return <BoonTag key={b.iid} b={b} large={true} />; })}
+                </div>
+              </div>
+            )}
+            <button className="btn-view-collection" onClick={function(e) { e.stopPropagation(); navigateToPick3(); }}>
+              COLLECTION
+            </button>
+            <button className="again-btn" style={{ marginTop: '10px' }} onClick={function(e) { e.stopPropagation(); handleRestart(); }}>
+              START OVER
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Deck exhausted overlay ── */}
       {phase === 'game_over' && (
         <div className="game-overlay" onClick={function(e) { e.stopPropagation(); }}>
@@ -476,6 +504,13 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
               PLAY AGAIN
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Level Up banner ── */}
+      {showLevelUp && (
+        <div className="growing-overlay">
+          <div className="growing-text">LEVEL UP</div>
         </div>
       )}
     </div>

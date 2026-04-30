@@ -30,6 +30,27 @@ export const PICK4_RC: Record<Pick4Rarity, string> = {
   legendary: '#D4AF37',
 };
 
+// ── Rarity-scale multipliers by level ────────────────────────────────────────
+// Initialized with the same values as Pick 3's RARITY_SCALE (constants.ts).
+// Kept as separate named constants so each can be tuned independently.
+export const PICK4_COMMON_SCALE:    number[] = [0.9,    0.76,  0.64,  0.53,  0.36 ];
+export const PICK4_UNCOMMON_SCALE:  number[] = [0.05,   0.26,  0.62,  1.2,   1.75 ];
+export const PICK4_RARE_SCALE:      number[] = [0.001,  0.065, 0.38,  1.12,  2.35 ];
+export const PICK4_LEGENDARY_SCALE: number[] = [0.0002, 0.014, 0.15,  0.64,  1.78 ];
+
+export const PICK4_RARITY_SCALE: Record<Pick4Rarity, number[]> = {
+  common:    PICK4_COMMON_SCALE,
+  uncommon:  PICK4_UNCOMMON_SCALE,
+  rare:      PICK4_RARE_SCALE,
+  legendary: PICK4_LEGENDARY_SCALE,
+};
+
+/** Returns the draw-weight multiplier for a rarity at the given level. */
+export function pick4RarityMult(rarity: Pick4Rarity, level: number): number {
+  var arr = PICK4_RARITY_SCALE[rarity] || [1];
+  return arr[Math.min(Math.max(0, level - 1), arr.length - 1)];
+}
+
 var _iidSeq = 0;
 export function makeP4Iid(id: string): string {
   return id + '_' + Date.now() + '_' + (++_iidSeq);
@@ -159,12 +180,13 @@ export function makePick4Deck(wins: number, loses: number): ('win' | 'lose')[] {
 }
 
 /**
- * Draw `count` boon choices from PICK4_BOON_TEMPLATES, weighted by `w`,
- * excluding boon IDs already held by the player.
+ * Draw `count` boon choices from PICK4_BOON_TEMPLATES, weighted by `w` scaled
+ * by the level-based rarity multiplier, excluding boon IDs already held.
  */
 export function drawPick4BoonChoices(
   heldBoons: Pick4BoonInstance[],
-  count: number
+  count: number,
+  level: number
 ): Pick4BoonTemplate[] {
   var heldIds = new Set(heldBoons.map(function(b) { return b.id; }));
   var available = PICK4_BOON_TEMPLATES.filter(function(b) { return !heldIds.has(b.id); });
@@ -174,12 +196,12 @@ export function drawPick4BoonChoices(
   var pool = available.slice();
 
   for (var i = 0; i < count && pool.length > 0; i++) {
-    var totalW = pool.reduce(function(s, b) { return s + b.w; }, 0);
+    var totalW = pool.reduce(function(s, b) { return s + b.w * pick4RarityMult(b.rarity, level); }, 0);
     var r = Math.random() * totalW;
     var acc = 0;
     var idx = pool.length - 1;
     for (var j = 0; j < pool.length; j++) {
-      acc += pool[j].w;
+      acc += pool[j].w * pick4RarityMult(pool[j].rarity, level);
       if (r < acc) { idx = j; break; }
     }
     chosen.push(pool[idx]);
