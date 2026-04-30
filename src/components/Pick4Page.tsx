@@ -1,10 +1,15 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
-  PICK4_RC,
+  PICK4_RC, PICK4_BOON_TEMPLATES,
   Pick4BoonTemplate, Pick4BoonInstance,
   makePick4Deck, drawPick4BoonChoices, instantiatePick4Boon,
 } from '../pick4Boons';
 import { BoonTag } from './BoonTag';
+import { Pick4CollectionModal } from './Pick4CollectionModal';
+import {
+  loadPick4Collection, savePick4Collection,
+  loadPick4RunState, savePick4RunState, clearPick4RunState,
+} from '../storage';
 
 const INIT_WIN_CARDS  = 34;
 const INIT_LOSE_CARDS = 18;
@@ -38,6 +43,10 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   var [savedAnimActive, setSavedAnimActive] = useState(false);
   var [choose2Cards, setChoose2Cards]   = useState<[CardType, CardType] | null>(null);
 
+  // ── Collection ────────────────────────────────────────────────────────
+  var [collection, setCollection]       = useState<Set<string>>(() => loadPick4Collection() as Set<string>);
+  var [showCollection, setShowCollection] = useState(false);
+
   // ── UI ────────────────────────────────────────────────────────────────
   var [showMenu, setShowMenu]         = useState(false);
   var [showLevelUp, setShowLevelUp]   = useState(false);
@@ -53,12 +62,44 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     timersRef.current = [];
   }
 
+  // ── Restore saved run state on mount ──────────────────────────────────
+  useEffect(function() {
+    var saved = loadPick4RunState();
+    if (!saved) return;
+    try {
+      setDeck(saved.deck || makePick4Deck(INIT_WIN_CARDS, INIT_LOSE_CARDS));
+      setDrawnHistory(saved.drawnHistory || []);
+      setBoons(saved.boons || []);
+      setDrawCount(saved.drawCount || 0);
+      setWinDrawCount(saved.winDrawCount || 0);
+      setShopRerolls(saved.shopRerolls || 0);
+    } catch(e) { clearPick4RunState(); }
+  }, []);
+
+  // ── Persist run state when idle ────────────────────────────────────────
+  useEffect(function() {
+    if (phase === 'game_over' || phase === 'eliminated') { clearPick4RunState(); return; }
+    if (phase !== 'idle') return;
+    try {
+      savePick4RunState({
+        deck: deck,
+        drawnHistory: drawnHistory,
+        boons: boons,
+        drawCount: drawCount,
+        winDrawCount: winDrawCount,
+        shopRerolls: shopRerolls,
+      });
+    } catch(e) {}
+  }, [deck, drawnHistory, boons, drawCount, winDrawCount, shopRerolls, phase]);
+
   // ── Derived state ─────────────────────────────────────────────────────
   var deckWins  = deck.filter(function(c) { return c === 'win';  }).length;
   var deckLoses = deck.filter(function(c) { return c === 'lose'; }).length;
   var level     = Math.floor(winDrawCount / 4) + 1;
   var isSaved   = baseCard === 'lose' && currentCard === 'win';
   var isOverlay = phase === 'choose2' || phase === 'shop' || phase === 'game_over' || phase === 'eliminated';
+  var seenBoons = PICK4_BOON_TEMPLATES.filter(function(b) { return collection.has(b.id); }).length;
+  var totalBoons = PICK4_BOON_TEMPLATES.length;
 
   // ── Open shop ─────────────────────────────────────────────────────────
   function openShop(curBoons: Pick4BoonInstance[], baseRerolls: number, curLevel: number) {
@@ -273,12 +314,19 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setDrawnHistory(newHistory);
     setShopRerolls(newRerolls);
     setShopChoices([]);
+    setCollection(function(prev) {
+      var next = new Set(prev);
+      next.add(boon.id);
+      savePick4Collection(next);
+      return next;
+    });
     setPhase('idle');
   }
 
   // ── Restart ───────────────────────────────────────────────────────────
   function handleRestart() {
     clearTimers();
+    clearPick4RunState();
     setDeck(makePick4Deck(INIT_WIN_CARDS, INIT_LOSE_CARDS));
     setDrawnHistory([]);
     setBoons([]);
@@ -311,6 +359,12 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
             <div className="menu-title">MENU</div>
             <button className="menu-btn menu-btn-pick3" onClick={function(e) { e.stopPropagation(); navigateToPick3(); }}>
               ← PICK 3 SLOP
+            </button>
+            <button
+              className="menu-btn menu-btn-collection"
+              onClick={function(e) { e.stopPropagation(); setShowMenu(false); setShowCollection(true); }}
+            >
+              COLLECTION ({seenBoons}/{totalBoons})
             </button>
             <button className="menu-btn-close" onClick={function(e) { e.stopPropagation(); setShowMenu(false); }}>
               CLOSE
@@ -513,6 +567,14 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
           <div className="growing-text">LEVEL UP</div>
         </div>
       )}
+
+      <Pick4CollectionModal
+        showCollection={showCollection}
+        collection={collection}
+        seenBoons={seenBoons}
+        totalBoons={totalBoons}
+        setShowCollection={setShowCollection}
+      />
     </div>
   );
 }
