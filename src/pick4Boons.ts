@@ -32,13 +32,13 @@ export const PICK4_RC: Record<Pick4Rarity, string> = {
 
 // ── Rarity-scale multipliers by level ────────────────────────────────────────
 // Initialized with the same values as Pick 3's RARITY_SCALE (constants.ts).
-// Kept as separate named variables so each can be tuned independently.
-export var PICK4_COMMON_SCALE:    number[] = [0.9,    0.76,  0.64,  0.53,  0.36 ];
-export var PICK4_UNCOMMON_SCALE:  number[] = [0.05,   0.26,  0.62,  1.2,   1.75 ];
-export var PICK4_RARE_SCALE:      number[] = [0.001,  0.065, 0.38,  1.12,  2.35 ];
-export var PICK4_LEGENDARY_SCALE: number[] = [0.0002, 0.014, 0.15,  0.64,  1.78 ];
+// Kept as separate named constants so each can be tuned independently.
+export const PICK4_COMMON_SCALE:    number[] = [0.9,    0.76,  0.64,  0.53,  0.36 ];
+export const PICK4_UNCOMMON_SCALE:  number[] = [0.05,   0.26,  0.62,  1.2,   1.75 ];
+export const PICK4_RARE_SCALE:      number[] = [0.001,  0.065, 0.38,  1.12,  2.35 ];
+export const PICK4_LEGENDARY_SCALE: number[] = [0.0002, 0.014, 0.15,  0.64,  1.78 ];
 
-export var PICK4_RARITY_SCALE: Record<Pick4Rarity, number[]> = {
+export const PICK4_RARITY_SCALE: Record<Pick4Rarity, number[]> = {
   common:    PICK4_COMMON_SCALE,
   uncommon:  PICK4_UNCOMMON_SCALE,
   rare:      PICK4_RARE_SCALE,

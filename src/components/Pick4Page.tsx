@@ -184,7 +184,10 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
       var drawnCard   = newDeck2.pop() as CardType;
       setDeck(newDeck2);
       setDrawnHistory(curDrawnHistory.concat(drawnCard));
-      // Set the card face immediately so it shows the correct value before the flip animation completes
+      // Set the card face content immediately so the front face already shows the correct WIN/LOSE
+      // text before the flip animation reveals it (~500ms in). resolveCard will overwrite this with
+      // the boon-processed result at 950ms; any difference (e.g. Aegis turning LOSE→WIN) will update
+      // the visible face right as the flip completes, which is the intended save-reveal behaviour.
       setCurrentCard(drawnCard);
       later(function() {
         resolveCard(drawnCard, curBoons, curShopRerolls, curWinDrawCount);
