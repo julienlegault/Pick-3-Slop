@@ -87,7 +87,7 @@ function CollectionModalInner({ sorted, collection, seenBoons, totalBoons, setSh
         <div className="progress-bar">
           <div className="progress-fill" style={{ width: (totalBoons > 0 ? (seenBoons / totalBoons * 100) : 0) + '%' }} />
         </div>
-        <div className="boon-grid">
+        <div className="boon-grid" onScroll={clearTooltip}>
           {sorted.map(function(b) {
             var seen = collection.has(b.id);
             var c = RC[b.rarity];
