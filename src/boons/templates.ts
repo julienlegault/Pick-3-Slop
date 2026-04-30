@@ -22,6 +22,7 @@ export function numericBoon(idRoot, name, effect, wMap, rangesByKey, descFn, ext
       w: wMap[rarity],
       randomValue: true,
       valueRanges: valueRanges,
+      descFn: descFn,
       roll: function() {
         var rolled: Record<string, unknown> = {};
         Object.keys(rangesByKey).forEach(function(k) {
