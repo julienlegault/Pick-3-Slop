@@ -530,7 +530,7 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
                 </div>
               </div>
             )}
-            <button className="btn-view-collection" onClick={function(e) { e.stopPropagation(); navigateToPick3(); }}>
+            <button className="btn-view-collection" onClick={function(e) { e.stopPropagation(); setShowCollection(true); }}>
               COLLECTION
             </button>
             <button className="again-btn" style={{ marginTop: '10px' }} onClick={function(e) { e.stopPropagation(); handleRestart(); }}>
