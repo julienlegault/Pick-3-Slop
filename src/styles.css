@@ -741,10 +741,22 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   from { transform: rotateY(0deg); }
   to   { transform: rotateY(180deg); }
 }
-@keyframes pick4SavedIn {
-  0%   { transform: scale(0.55) rotate(-6deg); opacity: 0; }
-  65%  { transform: scale(1.06) rotate(0deg);  opacity: 1; }
-  100% { transform: scale(1) rotate(0deg);     opacity: 1; }
+@keyframes pick4EdgeOvertake {
+  0% {
+    opacity: 0;
+    box-shadow: 0 0 0 12px rgba(212,175,55,.5), 0 0 32px rgba(212,175,55,.35);
+    filter: blur(2px);
+  }
+  45% {
+    opacity: .95;
+    box-shadow: 0 0 0 5px rgba(212,175,55,.25), 0 0 20px rgba(212,175,55,.25);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 24px rgba(212,175,55,.2);
+    filter: blur(0);
+  }
 }
 
 .pick4-root {
@@ -944,15 +956,15 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0a2a14 0%, #051408 100%);
-  border: 2px solid #22C55E;
-  color: #22C55E;
+  background: linear-gradient(135deg, #2a1e0a 0%, #14100a 100%);
+  border: 2px solid #D4AF37;
+  color: #D4AF37;
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: .18em;
-  text-shadow: 0 0 18px rgba(34,197,94,.5);
-  box-shadow: 0 0 24px rgba(34,197,94,.2);
-  animation: pick4SavedIn .38s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  text-shadow: 0 0 18px rgba(212,175,55,.5);
+  box-shadow: 0 0 24px rgba(212,175,55,.2);
+  animation: pick4EdgeOvertake .45s ease both;
 }
 
 /* ── Draw button ── */

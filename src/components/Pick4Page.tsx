@@ -176,8 +176,8 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
         setShowLevelUp(true);
         later(function() { setShowLevelUp(false); }, 1500);
         later(function() { openShop(result.newBoons, curShopRerolls, newLevel); }, 1600);
-      } else if (result.savedBy50) {
-        // Show lose face → flip to SAVED! → open shop
+      } else if (card === 'lose') {
+        // Any boon rescued a lose (Aegis, Luck's Embrace, etc.) → show lose face → SAVED! → shop
         later(function() { setSavedAnimActive(true); }, 700);
         later(function() { openShop(result.newBoons, curShopRerolls, newLevel); }, 1600);
       } else {
@@ -407,8 +407,11 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
               <div className={'pick4-card-wrapper' + (phase === 'drawing' ? ' pick4-card-flying' : '')}>
                 {(function() {
                   var showSaved  = isSaved && savedAnimActive;
-                  var cardClass  = (showSaved || currentCard === 'win') ? 'pick4-card-win' : 'pick4-card-lose';
-                  var cardText   = showSaved ? 'SAVED!' : (currentCard === 'win' ? 'WIN' : 'LOSE');
+                  // Keep the card face as LOSE while a boon save is in progress so the
+                  // LOSE card is visible beneath the golden overlay as it animates in.
+                  var cardClass  = currentCard === 'win' && !isSaved ? 'pick4-card-win' : 'pick4-card-lose';
+                  // Show LOSE text until the overlay appears; the overlay covers this once active.
+                  var cardText   = showSaved ? 'SAVED!' : (isSaved ? 'LOSE' : (currentCard === 'win' ? 'WIN' : 'LOSE'));
                   return (
                     <div className={
                       'pick4-card-inner'
@@ -424,7 +427,9 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
                 })()}
                 {/* Saved animation overlay */}
                 {isSaved && savedAnimActive && (
-                  <div className="pick4-saved-overlay">SAVED!</div>
+                  <div className="pick4-saved-overlay">
+                    <span style={{ animation: 'rescueTextFade .3s ease' }}>SAVED!</span>
+                  </div>
                 )}
               </div>
             )}
