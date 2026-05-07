@@ -7,6 +7,7 @@ import {
   tryRescue, enforceMinimumLoseAreaAfterSpin,
   applyBoon,
   getStackedDesc,
+  RARITY_RANK, RARITY_ORDER,
 } from './logic';
 import {
   loadRunState, saveRunState, clearRunState,
@@ -135,7 +136,7 @@ export function useGameState() {
     setAnim(false);
     setWdeg(d.targetDeg);
     setBoons(d.fb);
-    setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan, isDoom: d.isDoom });
+    setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan, isDoom: d.isDoom, savedByBoon: d.savedByBoon || null, sacrificedBoon: d.sacrificedBoon || null });
     setRevealFlip(false);
     setRevealDoom(false);
     setPhase('reveal');
@@ -226,12 +227,27 @@ export function useGameState() {
 
     var landed = layout[idx].type;
     var result = landed, fb = spinBoons, triggered = [];
+    var savedByBoon = null;
+    var sacrificedBoon = null;
     if (landed === 'lose' || doomFired) {
       if (doomFired) result = 'lose'; // doom forces a loss before rescue check
       var res = tryRescue(spinBoons);
       result = res.ok ? 'win' : 'lose';
       fb = res.boons;
       triggered = res.triggered || [];
+      if (res.ok && res.savedByIid) {
+        var savingBoon = spinBoons.find(function(b) { return b.iid === res.savedByIid; });
+        if (savingBoon) {
+          var savingGroupKey = savingBoon.group || savingBoon.id;
+          var savingGrp = spinBoons.filter(function(b) { return (b.group || b.id) === savingGroupKey; });
+          var maxRank = savingGrp.reduce(function(max, b) { return Math.max(max, RARITY_RANK[b.rarity] || 0); }, 0);
+          savedByBoon = Object.assign({}, savingBoon, {
+            name: savingBoon.name + (savingGrp.length > 1 ? ' \xd7' + savingGrp.length : ''),
+            rarity: RARITY_ORDER[maxRank],
+          });
+        }
+      }
+      if (res.sacrificedBoon) sacrificedBoon = res.sacrificedBoon;
     }
     var postSpinGrowth = null;
     if (result === 'win') {
@@ -248,7 +264,7 @@ export function useGameState() {
       fb: fb, postSpinGrowth: postSpinGrowth, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen,
       nonCommonPickStreak: nonCommonPickStreak,
       isEndless: isEndless, endlessSpin: endlessSpin, doomGroupKeys: doomGroupKeys,
-      isDoom: doomFired,
+      isDoom: doomFired, savedByBoon: savedByBoon, sacrificedBoon: sacrificedBoon,
     };
     doneRef.current = false;
     spinInteractGuardRef.current = true;
@@ -580,6 +596,7 @@ export function useGameState() {
       var totalCharges = grp.reduce(function(sum, b) { return sum + (b.charges || 0); }, 0);
       var isDoom = doomGroupKeys.indexOf(key) !== -1;
       var doomChancePct = isDoom ? Math.round(calcGroupDoomChance(grp) * 1000) / 10 : 0;
+      var maxRarityRank = isDoom ? 0 : grp.reduce(function(max, b) { return Math.max(max, RARITY_RANK[b.rarity] || 0); }, 0);
       return Object.assign({}, first, {
         name: isDoom ? 'DOOM' : (first.name + (n > 1 ? ' \xd7' + n : '')),
         desc: isDoom
@@ -588,6 +605,7 @@ export function useGameState() {
         charges: totalCharges,
         isDoom: isDoom,
         doomChancePct: doomChancePct,
+        rarity: RARITY_ORDER[maxRarityRank],
       });
     });
   })();

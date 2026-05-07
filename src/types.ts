@@ -97,6 +97,10 @@ export interface RescueResult {
   triggered: string[];
   /** Identifies the mechanic that produced the win (e.g. "shield"), or null on a loss. */
   winBy: string | null;
+  /** The iid (or token) of the specific boon instance that completed the rescue. */
+  savedByIid?: string;
+  /** For sacrifice_instead rescues: the boon object that was destroyed. */
+  sacrificedBoon?: Boon;
 }
 
 /**
@@ -156,4 +160,8 @@ export interface SpinResult {
   doomGroupKeys: string[];
   /** True when a doom boon triggered a forced loss this spin. */
   isDoom: boolean;
+  /** Display object for the boon (or stacked group) that rescued the player this spin. */
+  savedByBoon?: Boon | null;
+  /** For sacrifice_instead rescues: the boon object that was destroyed. */
+  sacrificedBoon?: Boon | null;
 }
