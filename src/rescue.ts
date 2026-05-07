@@ -72,13 +72,13 @@ export function tryRescue(boons) {
     if (b.effect === 'shield' && (b.charges || 0) > 0) {
       triggered.push(token);
       nb = consumeProtected(nb, i);
-      return { ok: true, boons: nb, triggered: triggered, winBy: 'shield' };
+      return { ok: true, boons: nb, triggered: triggered, winBy: 'shield', savedByIid: token };
     }
 
     if (b.effect === 'rescue_independent') {
       triggered.push(token);
       if (Math.random() < boonNumeric(b, 'chance')) {
-        return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_independent' };
+        return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_independent', savedByIid: token };
       }
     }
 
@@ -87,7 +87,7 @@ export function tryRescue(boons) {
       addP += boonNumeric(b, 'chance');
       addCap = Math.max(addCap, boonNumeric(b, 'cap'));
       if (Math.random() < clamp(addP, 0, addCap || 0.95)) {
-        return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_additive' };
+        return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_additive', savedByIid: token };
       }
     }
 
@@ -96,7 +96,7 @@ export function tryRescue(boons) {
       hasMul = true;
       failMul *= (1 - boonNumeric(b, 'chance'));
       if (Math.random() < clamp(1 - failMul, 0, 0.995)) {
-        return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_multiplicative' };
+        return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_multiplicative', savedByIid: token };
       }
     }
 
@@ -104,7 +104,7 @@ export function tryRescue(boons) {
       triggered.push(token);
       if (Math.random() < boonNumeric(b, 'chance')) {
         if (Math.random() < boonNumeric(b, 'breakChance')) nb = consumeProtected(nb, i);
-        return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_fragile' };
+        return { ok: true, boons: nb, triggered: triggered, winBy: 'rescue_fragile', savedByIid: token };
       }
     }
 
@@ -113,8 +113,9 @@ export function tryRescue(boons) {
       var candidates = [];
       for (var c = 0; c < nb.length; c++) if (c !== i) candidates.push(c);
       var idx = candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : i;
+      var sacrificed = Object.assign({}, nb[idx]);
       nb.splice(idx, 1);
-      return { ok: true, boons: nb, triggered: triggered, winBy: 'sacrifice_instead' };
+      return { ok: true, boons: nb, triggered: triggered, winBy: 'sacrifice_instead', savedByIid: token, sacrificedBoon: sacrificed };
     }
   }
 

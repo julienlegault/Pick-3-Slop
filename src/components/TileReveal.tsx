@@ -1,4 +1,5 @@
 import { revealWedge } from '../logic';
+import { RC } from '../logic';
 
 // TileReveal — the reveal overlay card shown during the 'reveal' phase.
 // Returns null when phase !== 'reveal' or rtile is absent.
@@ -23,9 +24,14 @@ export function TileReveal({ phase, rtile, revealDoom, revealFlip }) {
       ? (revealFlip ? 'SAVED!' : 'x LOSE x')
       : (rtile.type === 'win' ? '* WIN *' : 'x LOSE x');
 
+  var showSavedBoon = revealFlip && rtile.savedByBoon && (
+    (!rtile.isDoom && rtile.baseType === 'lose' && rtile.type === 'win') ||
+    (rtile.isDoom && rtile.type === 'win')
+  );
+
   return (
     <div className="reveal-overlay">
-      <div className="reveal-card">
+      <div className="reveal-card" style={{ position: 'relative' }}>
         <svg width={310} height={260} overflow="visible">
           <g>
             {rtile.isDoom ? (
@@ -66,6 +72,54 @@ export function TileReveal({ phase, rtile, revealDoom, revealFlip }) {
             </text>
           </g>
         </svg>
+        {showSavedBoon && (function() {
+          var sb = rtile.savedByBoon;
+          var sc = RC[sb.rarity] || '#909090';
+          return (
+            <div style={{
+              position: 'absolute',
+              top: '72px',
+              left: '210px',
+              transform: 'rotate(45deg)',
+              transformOrigin: '0 0',
+              display: 'flex',
+              flexDirection: 'row',
+              gap: '6px',
+              alignItems: 'center',
+              animation: 'rescueTextFade .3s ease',
+              pointerEvents: 'none',
+            }}>
+              <span style={{
+                border: '1px solid ' + sc,
+                color: sc,
+                background: sc + '14',
+                padding: '3px 8px',
+                fontSize: '.62rem',
+                fontFamily: "'Cinzel', serif",
+                borderRadius: '2px',
+                whiteSpace: 'nowrap',
+                display: 'inline-block',
+              }}>
+                {sb.name}
+              </span>
+              {rtile.sacrificedBoon && (
+                <span style={{
+                  border: '1px solid #ff4444',
+                  color: '#ff4444',
+                  background: '#ff444414',
+                  padding: '3px 8px',
+                  fontSize: '.62rem',
+                  fontFamily: "'Cinzel', serif",
+                  borderRadius: '2px',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-block',
+                }}>
+                  {rtile.sacrificedBoon.name}
+                </span>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

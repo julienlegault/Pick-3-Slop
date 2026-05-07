@@ -7,6 +7,7 @@ import {
   tryRescue, enforceMinimumLoseAreaAfterSpin,
   applyBoon,
   getStackedDesc,
+  RARITY_RANK, RARITY_ORDER,
 } from './logic';
 import {
   loadRunState, saveRunState, clearRunState,
@@ -19,6 +20,15 @@ var NO_TRACK = (new URLSearchParams(window.location.search)).has('notrack');
 var SHAKE_INTERVAL_MS     = 120;
 var SHAKE_CLEAR_DELAY_MS  = 140;
 var SPIN_INTERACT_GUARD_MS = 80;
+
+/**
+ * Returns the rarest rarity present in a group of boons.
+ * Uses RARITY_RANK to compare tiers; falls back to the first boon's rarity.
+ */
+function getGroupDisplayRarity(grp) {
+  var maxRank = grp.reduce(function(max, b) { return Math.max(max, RARITY_RANK[b.rarity] || 0); }, 0);
+  return RARITY_ORDER[maxRank] || grp[0].rarity;
+}
 
 export function useGameState() {
   var _s1  = useState(INIT_TILES); var tiles = _s1[0]; var setTiles = _s1[1];
@@ -135,7 +145,7 @@ export function useGameState() {
     setAnim(false);
     setWdeg(d.targetDeg);
     setBoons(d.fb);
-    setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan, isDoom: d.isDoom });
+    setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan, isDoom: d.isDoom, savedByBoon: d.savedByBoon || null, sacrificedBoon: d.sacrificedBoon || null });
     setRevealFlip(false);
     setRevealDoom(false);
     setPhase('reveal');
@@ -226,12 +236,26 @@ export function useGameState() {
 
     var landed = layout[idx].type;
     var result = landed, fb = spinBoons, triggered = [];
+    var savedByBoon = null;
+    var sacrificedBoon = null;
     if (landed === 'lose' || doomFired) {
       if (doomFired) result = 'lose'; // doom forces a loss before rescue check
       var res = tryRescue(spinBoons);
       result = res.ok ? 'win' : 'lose';
       fb = res.boons;
       triggered = res.triggered || [];
+      if (res.ok && res.savedByIid) {
+        var savingBoon = spinBoons.find(function(b) { return b.iid === res.savedByIid; });
+        if (savingBoon) {
+          var savingGroupKey = savingBoon.group || savingBoon.id;
+          var savingGrp = spinBoons.filter(function(b) { return (b.group || b.id) === savingGroupKey; });
+          savedByBoon = Object.assign({}, savingBoon, {
+            name: savingBoon.name + (savingGrp.length > 1 ? ' \xd7' + savingGrp.length : ''),
+            rarity: getGroupDisplayRarity(savingGrp),
+          });
+        }
+      }
+      if (res.sacrificedBoon) sacrificedBoon = res.sacrificedBoon;
     }
     var postSpinGrowth = null;
     if (result === 'win') {
@@ -248,7 +272,7 @@ export function useGameState() {
       fb: fb, postSpinGrowth: postSpinGrowth, nc: nChoices, halfSpan: hs, gl: gl, shopsSeen: shopsSeen,
       nonCommonPickStreak: nonCommonPickStreak,
       isEndless: isEndless, endlessSpin: endlessSpin, doomGroupKeys: doomGroupKeys,
-      isDoom: doomFired,
+      isDoom: doomFired, savedByBoon: savedByBoon, sacrificedBoon: sacrificedBoon,
     };
     doneRef.current = false;
     spinInteractGuardRef.current = true;
@@ -588,6 +612,7 @@ export function useGameState() {
         charges: totalCharges,
         isDoom: isDoom,
         doomChancePct: doomChancePct,
+        rarity: isDoom ? first.rarity : getGroupDisplayRarity(grp),
       });
     });
   })();
