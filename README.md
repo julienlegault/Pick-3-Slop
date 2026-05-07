@@ -44,4 +44,4 @@ npm run preview
 
 ## Deployment
 
-The app is deployed with GitHub Pages through the workflow in `/home/runner/work/Pick-3-Slop/Pick-3-Slop/.github/workflows/deploy.yml`.
+The app is deployed with GitHub Pages through the workflow in `.github/workflows/deploy.yml`.
