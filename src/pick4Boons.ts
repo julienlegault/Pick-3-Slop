@@ -191,7 +191,7 @@ export const PICK4_BOON_TEMPLATES: Pick4BoonTemplate[] = [
     w: 4,
     effect: 'card_dave',
     isCardBoon: true,
-    desc: 'When drawn: immediately draw two cards and choose one of those whose effects to apply.',
+    desc: 'When drawn: immediately draw two cards and choose one of those whose effect to apply.',
   },
   {
     id: 'p4_card_andrew',
@@ -256,7 +256,7 @@ export const PICK4_BOON_TEMPLATES: Pick4BoonTemplate[] = [
     w: 1,
     effect: 'card_tony',
     isCardBoon: true,
-    desc: "When drawn: draw a card for each time you've drawn a Tony this game, then choose one of those whose effects to apply.",
+    desc: "When drawn: draw a card for each time you've drawn a Tony this game, then choose one of those whose effect to apply.",
   },
   {
     id: 'p4_card_sarah',
