@@ -8,7 +8,6 @@ Pick 3 Slop is a browser-based roguelite built with React, TypeScript, and Vite.
 - Survive long enough to earn boon drafts between spins.
 - Build stronger combinations by stacking and rerolling boons.
 - Fill out the collection as you discover new boons.
-- Unlock Pick 4 mode after completing the collection.
 
 ## Tech stack
 
