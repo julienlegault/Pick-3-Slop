@@ -21,6 +21,15 @@ var SHAKE_INTERVAL_MS     = 120;
 var SHAKE_CLEAR_DELAY_MS  = 140;
 var SPIN_INTERACT_GUARD_MS = 80;
 
+/**
+ * Returns the rarest rarity present in a group of boons.
+ * Uses RARITY_RANK to compare tiers; falls back to the first boon's rarity.
+ */
+function getGroupDisplayRarity(grp) {
+  var maxRank = grp.reduce(function(max, b) { return Math.max(max, RARITY_RANK[b.rarity] || 0); }, 0);
+  return RARITY_ORDER[maxRank] || grp[0].rarity;
+}
+
 export function useGameState() {
   var _s1  = useState(INIT_TILES); var tiles = _s1[0]; var setTiles = _s1[1];
   var _s2  = useState([]);         var boons = _s2[0]; var setBoons = _s2[1];
@@ -240,10 +249,9 @@ export function useGameState() {
         if (savingBoon) {
           var savingGroupKey = savingBoon.group || savingBoon.id;
           var savingGrp = spinBoons.filter(function(b) { return (b.group || b.id) === savingGroupKey; });
-          var maxRank = savingGrp.reduce(function(max, b) { return Math.max(max, RARITY_RANK[b.rarity] || 0); }, 0);
           savedByBoon = Object.assign({}, savingBoon, {
             name: savingBoon.name + (savingGrp.length > 1 ? ' \xd7' + savingGrp.length : ''),
-            rarity: RARITY_ORDER[maxRank],
+            rarity: getGroupDisplayRarity(savingGrp),
           });
         }
       }
@@ -596,7 +604,6 @@ export function useGameState() {
       var totalCharges = grp.reduce(function(sum, b) { return sum + (b.charges || 0); }, 0);
       var isDoom = doomGroupKeys.indexOf(key) !== -1;
       var doomChancePct = isDoom ? Math.round(calcGroupDoomChance(grp) * 1000) / 10 : 0;
-      var maxRarityRank = isDoom ? 0 : grp.reduce(function(max, b) { return Math.max(max, RARITY_RANK[b.rarity] || 0); }, 0);
       return Object.assign({}, first, {
         name: isDoom ? 'DOOM' : (first.name + (n > 1 ? ' \xd7' + n : '')),
         desc: isDoom
@@ -605,7 +612,7 @@ export function useGameState() {
         charges: totalCharges,
         isDoom: isDoom,
         doomChancePct: doomChancePct,
-        rarity: RARITY_ORDER[maxRarityRank],
+        rarity: isDoom ? first.rarity : getGroupDisplayRarity(grp),
       });
     });
   })();
