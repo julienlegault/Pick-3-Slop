@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import {
   PICK4_RC, PICK4_BOON_TEMPLATES,
   Pick4BoonTemplate, Pick4BoonInstance,
+  BoonDeckCard, DeckCard,
+  isBoonDeckCard, makeBoonDeckCard,
   makePick4Deck, drawPick4BoonChoices, instantiatePick4Boon,
 } from '../pick4Boons';
 import { BoonTag } from './BoonTag';
@@ -19,17 +21,19 @@ interface Pick4PageProps {
   navigateToPick3: () => void;
 }
 
-type Phase    = 'idle' | 'drawing' | 'revealed' | 'choose2' | 'shop' | 'game_over' | 'eliminated';
+type Phase    = 'idle' | 'drawing' | 'revealed' | 'choose2' | 'choose_card_effect' | 'shop' | 'game_over' | 'eliminated';
 type CardType = 'win' | 'lose';
+type CardDisplay = 'win' | 'lose' | 'boon';
 
 export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   // ── Deck / history ────────────────────────────────────────────────────
-  var [deck, setDeck]               = useState<CardType[]>(() => makePick4Deck(INIT_WIN_CARDS, INIT_LOSE_CARDS));
-  var [drawnHistory, setDrawnHistory] = useState<CardType[]>([]);
+  var [deck, setDeck]               = useState<DeckCard[]>(() => makePick4Deck(INIT_WIN_CARDS, INIT_LOSE_CARDS));
+  var [drawnHistory, setDrawnHistory] = useState<DeckCard[]>([]);
 
   // ── Progress ──────────────────────────────────────────────────────────
-  var [drawCount, setDrawCount]       = useState(0);
-  var [winDrawCount, setWinDrawCount] = useState(0);
+  var [drawCount, setDrawCount]         = useState(0);
+  var [winDrawCount, setWinDrawCount]   = useState(0);
+  var [tonyDrawCount, setTonyDrawCount] = useState(0);
 
   // ── Boons / shop ──────────────────────────────────────────────────────
   var [boons, setBoons]             = useState<Pick4BoonInstance[]>([]);
@@ -37,19 +41,22 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   var [shopChoices, setShopChoices] = useState<Pick4BoonTemplate[]>([]);
 
   // ── Phase / card result ───────────────────────────────────────────────
-  var [phase, setPhase]                 = useState<Phase>('idle');
-  var [baseCard, setBaseCard]           = useState<CardType | null>(null);
-  var [currentCard, setCurrentCard]     = useState<CardType | null>(null);
+  var [phase, setPhase]                     = useState<Phase>('idle');
+  var [baseCard, setBaseCard]               = useState<CardType | null>(null);
+  var [currentCard, setCurrentCard]         = useState<CardDisplay | null>(null);
+  var [currentBoonCard, setCurrentBoonCard] = useState<BoonDeckCard | null>(null);
   var [savedAnimActive, setSavedAnimActive] = useState(false);
-  var [choose2Cards, setChoose2Cards]   = useState<[CardType, CardType] | null>(null);
+  var [choose2Cards, setChoose2Cards]       = useState<DeckCard[]>([]);
+  var [cardChoices, setCardChoices]         = useState<DeckCard[]>([]);
 
   // ── Collection ────────────────────────────────────────────────────────
-  var [collection, setCollection]       = useState<Set<string>>(() => loadPick4Collection() as Set<string>);
+  var [collection, setCollection]         = useState<Set<string>>(() => loadPick4Collection() as Set<string>);
   var [showCollection, setShowCollection] = useState(false);
 
   // ── UI ────────────────────────────────────────────────────────────────
-  var [showMenu, setShowMenu]         = useState(false);
-  var [showLevelUp, setShowLevelUp]   = useState(false);
+  var [showMenu, setShowMenu]       = useState(false);
+  var [showLevelUp, setShowLevelUp] = useState(false);
+  var [showDeckView, setShowDeckView] = useState(false);
 
   // ── Timer helpers ─────────────────────────────────────────────────────
   var timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -73,6 +80,7 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
       setDrawCount(saved.drawCount || 0);
       setWinDrawCount(saved.winDrawCount || 0);
       setShopRerolls(saved.shopRerolls || 0);
+      setTonyDrawCount(saved.tonyDrawCount || 0);
     } catch(e) { clearPick4RunState(); }
   }, []);
 
@@ -88,16 +96,18 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
         drawCount: drawCount,
         winDrawCount: winDrawCount,
         shopRerolls: shopRerolls,
+        tonyDrawCount: tonyDrawCount,
       });
     } catch(e) {}
-  }, [deck, drawnHistory, boons, drawCount, winDrawCount, shopRerolls, phase]);
+  }, [deck, drawnHistory, boons, drawCount, winDrawCount, shopRerolls, tonyDrawCount, phase]);
 
   // ── Derived state ─────────────────────────────────────────────────────
   var deckWins  = deck.filter(function(c) { return c === 'win';  }).length;
   var deckLoses = deck.filter(function(c) { return c === 'lose'; }).length;
+  var deckBoons = deck.filter(function(c) { return isBoonDeckCard(c); }) as BoonDeckCard[];
   var level     = Math.floor(winDrawCount / 4) + 1;
   var isSaved   = baseCard === 'lose' && currentCard === 'win';
-  var isOverlay = phase === 'choose2' || phase === 'shop' || phase === 'game_over' || phase === 'eliminated';
+  var isOverlay = phase === 'choose2' || phase === 'choose_card_effect' || phase === 'shop' || phase === 'game_over' || phase === 'eliminated';
   var seenBoons = PICK4_BOON_TEMPLATES.filter(function(b) { return collection.has(b.id); }).length;
   var totalBoons = PICK4_BOON_TEMPLATES.length;
 
@@ -111,14 +121,30 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   }
 
   // ── Apply passive draw boon effects ───────────────────────────────────
-  // Returns the final card type and updated boon list after passive checks.
+  // Returns the final card type and updated boon/deck lists after all checks.
   function applyDrawBoons(
     drawnCard: CardType,
-    curBoons: Pick4BoonInstance[]
-  ): { finalCard: CardType; newBoons: Pick4BoonInstance[]; savedBy50: boolean } {
+    curBoons: Pick4BoonInstance[],
+    curDeck: DeckCard[]
+  ): { finalCard: CardType; newBoons: Pick4BoonInstance[]; savedBy50: boolean; newDeck: DeckCard[] } {
     var finalCard = drawnCard;
     var newBoons  = curBoons.slice();
+    var newDeck   = curDeck.slice();
     var savedBy50 = false;
+
+    // Alfred passive: while Alfred is in deck, lose → win + remove a win from deck
+    if (finalCard === 'lose') {
+      var alfredInDeck = newDeck.some(function(c) { return isBoonDeckCard(c) && c.boonId === 'p4_card_alfred'; });
+      if (alfredInDeck) {
+        finalCard = 'win';
+        var winIndices: number[] = [];
+        for (var ai = 0; ai < newDeck.length; ai++) { if (newDeck[ai] === 'win') winIndices.push(ai); }
+        if (winIndices.length > 0) {
+          var wIdx = winIndices[Math.floor(Math.random() * winIndices.length)];
+          newDeck.splice(wIdx, 1);
+        }
+      }
+    }
 
     // Aegis (next_lose_win) — consumes a charge
     if (finalCard === 'lose') {
@@ -132,7 +158,6 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
         finalCard = 'win';
         var aegis      = newBoons[aegisIdx];
         var remaining  = (aegis.charges || 1) - 1;
-        // Remove boon when depleted so it can be re-offered
         newBoons.splice(aegisIdx, 1);
         if (remaining > 0) {
           newBoons.splice(aegisIdx, 0, Object.assign({}, aegis, { charges: remaining }));
@@ -149,20 +174,32 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
       }
     }
 
-    return { finalCard: finalCard, newBoons: newBoons, savedBy50: savedBy50 };
+    // Sarah passive: while Sarah is in deck, when a win is drawn, add a win to deck
+    if (finalCard === 'win') {
+      var sarahInDeck = newDeck.some(function(c) { return isBoonDeckCard(c) && c.boonId === 'p4_card_sarah'; });
+      if (sarahInDeck) {
+        var sarahPos = Math.floor(Math.random() * (newDeck.length + 1));
+        newDeck.splice(sarahPos, 0, 'win');
+      }
+    }
+
+    return { finalCard: finalCard, newBoons: newBoons, savedBy50: savedBy50, newDeck: newDeck };
   }
 
-  // ── Resolve a single drawn card and transition phases ─────────────────
+  // ── Resolve a single drawn win/lose card and transition phases ─────────
   function resolveCard(
     card: CardType,
+    curDeck: DeckCard[],
     curBoons: Pick4BoonInstance[],
     curShopRerolls: number,
     curWinDrawCount: number
   ) {
-    var result = applyDrawBoons(card, curBoons);
+    var result = applyDrawBoons(card, curBoons, curDeck);
     setBaseCard(card);
     setCurrentCard(result.finalCard);
+    setCurrentBoonCard(null);
     setBoons(result.newBoons);
+    setDeck(result.newDeck);
     setSavedAnimActive(false);
     setPhase('revealed');
 
@@ -171,13 +208,13 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
       setWinDrawCount(newWinCount);
       var newLevel      = Math.floor(newWinCount / 4) + 1;
       var isLevelUp     = newWinCount % 4 === 0;
+      var isNowSaved    = card === 'lose';
 
       if (isLevelUp) {
         setShowLevelUp(true);
         later(function() { setShowLevelUp(false); }, 1500);
         later(function() { openShop(result.newBoons, curShopRerolls, newLevel); }, 1600);
-      } else if (card === 'lose') {
-        // Any boon rescued a lose (Aegis, Luck's Embrace, etc.) → show lose face → SAVED! → shop
+      } else if (isNowSaved) {
         later(function() { setSavedAnimActive(true); }, 700);
         later(function() { openShop(result.newBoons, curShopRerolls, newLevel); }, 1600);
       } else {
@@ -186,6 +223,213 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     } else {
       // Unprotected lose → game over
       setPhase('eliminated');
+    }
+  }
+
+  // ── Resolve a win triggered by a card boon (Marry, Sarah, Alfred) ─────
+  function resolveAsWin(
+    curDeck: DeckCard[],
+    curBoons: Pick4BoonInstance[],
+    curShopRerolls: number,
+    curWinDrawCount: number
+  ) {
+    // Sarah passive: even a "counts as win" from a boon card triggers Sarah
+    var newDeck = curDeck.slice();
+    var sarahInDeck = newDeck.some(function(c) { return isBoonDeckCard(c) && c.boonId === 'p4_card_sarah'; });
+    if (sarahInDeck) {
+      var sarahPos = Math.floor(Math.random() * (newDeck.length + 1));
+      newDeck.splice(sarahPos, 0, 'win');
+      setDeck(newDeck);
+    }
+
+    setCurrentCard('win');
+    setCurrentBoonCard(null);
+    setPhase('revealed');
+
+    var newWinCount = curWinDrawCount + 1;
+    setWinDrawCount(newWinCount);
+    var newLevel  = Math.floor(newWinCount / 4) + 1;
+    var isLevelUp = newWinCount % 4 === 0;
+
+    if (isLevelUp) {
+      setShowLevelUp(true);
+      later(function() { setShowLevelUp(false); }, 1500);
+      later(function() { openShop(curBoons, curShopRerolls, newLevel); }, 1600);
+    } else {
+      later(function() { openShop(curBoons, curShopRerolls, newLevel); }, 500);
+    }
+  }
+
+  // ── Dispatch: resolve a generic DeckCard (win/lose/boon) ──────────────
+  function resolveDrawn(
+    card: DeckCard,
+    curDeck: DeckCard[],
+    curBoons: Pick4BoonInstance[],
+    curShopRerolls: number,
+    curWinDrawCount: number,
+    curDrawnHistory: DeckCard[],
+    curTonyDrawCount: number
+  ) {
+    if (isBoonDeckCard(card)) {
+      setCurrentBoonCard(card);
+      setCurrentCard('boon');
+      resolveBoonCard(card, curDeck, curBoons, curShopRerolls, curWinDrawCount, curDrawnHistory, curTonyDrawCount);
+    } else {
+      resolveCard(card, curDeck, curBoons, curShopRerolls, curWinDrawCount);
+    }
+  }
+
+  // ── Resolve a card boon that was drawn ────────────────────────────────
+  function resolveBoonCard(
+    boonCard: BoonDeckCard,
+    curDeck: DeckCard[],
+    curBoons: Pick4BoonInstance[],
+    curShopRerolls: number,
+    curWinDrawCount: number,
+    curDrawnHistory: DeckCard[],
+    curTonyDrawCount: number
+  ) {
+    var newDeck = curDeck.slice();
+    var boonId  = boonCard.boonId;
+
+    function shuffleInPlace(arr: DeckCard[]) {
+      for (var si = arr.length - 1; si > 0; si--) {
+        var sj = Math.floor(Math.random() * (si + 1));
+        var st = arr[si]; arr[si] = arr[sj]; arr[sj] = st;
+      }
+    }
+
+    function addToCollection(id: string) {
+      setCollection(function(prev) {
+        var next = new Set(prev); next.add(id); savePick4Collection(next); return next;
+      });
+    }
+
+    switch (boonId) {
+      case 'p4_card_dave': {
+        // Draw 2 cards, choose 1 effect
+        var daveChoices: DeckCard[] = [];
+        if (newDeck.length > 0) daveChoices.push(newDeck.pop()!);
+        if (newDeck.length > 0) daveChoices.push(newDeck.pop()!);
+        setDeck(newDeck);
+        if (daveChoices.length === 0) {
+          setPhase('idle');
+        } else if (daveChoices.length === 1) {
+          resolveDrawn(daveChoices[0], newDeck, curBoons, curShopRerolls, curWinDrawCount, curDrawnHistory, curTonyDrawCount);
+        } else {
+          setCardChoices(daveChoices);
+          setPhase('choose_card_effect');
+        }
+        break;
+      }
+      case 'p4_card_andrew': {
+        // Add a random uncommon card boon to the deck
+        var uncommonCards = PICK4_BOON_TEMPLATES.filter(function(b) { return b.isCardBoon && b.rarity === 'uncommon'; });
+        if (uncommonCards.length > 0) {
+          var picked = uncommonCards[Math.floor(Math.random() * uncommonCards.length)];
+          var aPos = Math.floor(Math.random() * (newDeck.length + 1));
+          newDeck.splice(aPos, 0, makeBoonDeckCard(picked.id));
+          addToCollection(picked.id);
+        }
+        setDeck(newDeck);
+        setPhase('idle');
+        break;
+      }
+      case 'p4_card_jessica': {
+        // Shuffle all drawn cards back into deck, then draw a card
+        var toReshuffle = curDrawnHistory.slice();
+        var combined = newDeck.concat(toReshuffle);
+        shuffleInPlace(combined);
+        setDrawnHistory([]);
+        if (combined.length === 0) {
+          setDeck([]);
+          setPhase('game_over');
+          return;
+        }
+        var jessCard = combined.pop()!;
+        var afterJess = combined.slice();
+        setDeck(afterJess);
+        setDrawnHistory([jessCard]);
+        resolveDrawn(jessCard, afterJess, curBoons, curShopRerolls, curWinDrawCount, [jessCard], curTonyDrawCount);
+        break;
+      }
+      case 'p4_card_tom': {
+        // Discard top 5 cards, then draw a card
+        for (var ti = 0; ti < 5 && newDeck.length > 0; ti++) newDeck.pop();
+        if (newDeck.length === 0) {
+          setDeck([]);
+          setPhase('game_over');
+          return;
+        }
+        var tomCard = newDeck.pop()!;
+        setDeck(newDeck);
+        setDrawnHistory(function(h) { return h.concat(tomCard); });
+        resolveDrawn(tomCard, newDeck, curBoons, curShopRerolls, curWinDrawCount, curDrawnHistory.concat(tomCard), curTonyDrawCount);
+        break;
+      }
+      case 'p4_card_marry': {
+        // Gain 1 shop reroll; counts as a win
+        var newRerolls = curShopRerolls + 1;
+        setShopRerolls(newRerolls);
+        resolveAsWin(newDeck, curBoons, newRerolls, curWinDrawCount);
+        break;
+      }
+      case 'p4_card_herald': {
+        // Destroy this card + 3 random cards from deck
+        for (var hi = 0; hi < 3 && newDeck.length > 0; hi++) {
+          var hIdx = Math.floor(Math.random() * newDeck.length);
+          newDeck.splice(hIdx, 1);
+        }
+        setDeck(newDeck);
+        setPhase('idle');
+        break;
+      }
+      case 'p4_card_wanda': {
+        // Add two copies of Wanda to deck, then draw a card
+        var wPos1 = Math.floor(Math.random() * (newDeck.length + 1));
+        newDeck.splice(wPos1, 0, makeBoonDeckCard('p4_card_wanda'));
+        var wPos2 = Math.floor(Math.random() * (newDeck.length + 1));
+        newDeck.splice(wPos2, 0, makeBoonDeckCard('p4_card_wanda'));
+        addToCollection('p4_card_wanda');
+        if (newDeck.length === 0) {
+          setDeck([]);
+          setPhase('game_over');
+          return;
+        }
+        var wandaCard = newDeck.pop()!;
+        setDeck(newDeck);
+        setDrawnHistory(function(h) { return h.concat(wandaCard); });
+        resolveDrawn(wandaCard, newDeck, curBoons, curShopRerolls, curWinDrawCount, curDrawnHistory.concat(wandaCard), curTonyDrawCount);
+        break;
+      }
+      case 'p4_card_tony': {
+        // Draw N cards (N = draws so far + 1), then choose 1 effect
+        var newTonyCount = curTonyDrawCount + 1;
+        setTonyDrawCount(newTonyCount);
+        var tonyChoices: DeckCard[] = [];
+        for (var ti2 = 0; ti2 < newTonyCount && newDeck.length > 0; ti2++) {
+          tonyChoices.push(newDeck.pop()!);
+        }
+        setDeck(newDeck);
+        if (tonyChoices.length === 0) {
+          setPhase('idle');
+        } else if (tonyChoices.length === 1) {
+          resolveDrawn(tonyChoices[0], newDeck, curBoons, curShopRerolls, curWinDrawCount, curDrawnHistory, newTonyCount);
+        } else {
+          setCardChoices(tonyChoices);
+          setPhase('choose_card_effect');
+        }
+        break;
+      }
+      case 'p4_card_sarah':
+      case 'p4_card_alfred': {
+        // Counts as a win when drawn
+        resolveAsWin(newDeck, curBoons, curShopRerolls, curWinDrawCount);
+        break;
+      }
+      default: {
+        setPhase('idle');
+      }
     }
   }
 
@@ -198,6 +442,7 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setSavedAnimActive(false);
     setDrawCount(function(c) { return c + 1; });
     setPhase('drawing');
+    setCurrentBoonCard(null);
 
     // Capture current state for use inside the timeout closures
     var curDeck          = deck;
@@ -205,14 +450,15 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     var curShopRerolls   = shopRerolls;
     var curDrawnHistory  = drawnHistory;
     var curWinDrawCount  = winDrawCount;
+    var curTonyDrawCount = tonyDrawCount;
 
     var hasOracle = curBoons.some(function(b) { return b.effect === 'draw_2_choose_1'; });
 
     if (hasOracle && curDeck.length >= 2) {
       // Oracle's Vision: draw 2 cards and let the player choose one
       var newDeck = curDeck.slice();
-      var card1   = newDeck.pop() as CardType;
-      var card2   = newDeck.pop() as CardType;
+      var card1   = newDeck.pop()!;
+      var card2   = newDeck.pop()!;
       setDeck(newDeck);
       // Drawn history updated when player makes their choice
       later(function() {
@@ -222,27 +468,58 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     } else {
       // Normal single draw
       var newDeck2    = curDeck.slice();
-      var drawnCard   = newDeck2.pop() as CardType;
+      var drawnCard   = newDeck2.pop()!;
       setDeck(newDeck2);
       setDrawnHistory(curDrawnHistory.concat(drawnCard));
-      // Set the card face content immediately so the front face already shows the correct WIN/LOSE
-      // text before the flip animation reveals it (~500ms in). resolveCard will overwrite this with
-      // the boon-processed result at 950ms; any difference (e.g. Aegis turning LOSE→WIN) will update
-      // the visible face right as the flip completes, which is the intended save-reveal behaviour.
-      setCurrentCard(drawnCard);
+      // Pre-set the card face so it is visible as the flip animation completes
+      if (isBoonDeckCard(drawnCard)) {
+        setCurrentBoonCard(drawnCard);
+        setCurrentCard('boon');
+      } else {
+        setCurrentCard(drawnCard);
+      }
       later(function() {
-        resolveCard(drawnCard, curBoons, curShopRerolls, curWinDrawCount);
+        if (isBoonDeckCard(drawnCard)) {
+          resolveBoonCard(drawnCard, newDeck2, curBoons, curShopRerolls, curWinDrawCount, curDrawnHistory.concat(drawnCard), curTonyDrawCount);
+        } else {
+          resolveCard(drawnCard, newDeck2, curBoons, curShopRerolls, curWinDrawCount);
+        }
       }, 950);
     }
   }
 
   // ── Oracle's Vision: player picks one of two cards ────────────────────
-  function handleChoose2(idx: 0 | 1) {
-    if (!choose2Cards || phase !== 'choose2') return;
+  function handleChoose2(idx: number) {
+    if (choose2Cards.length === 0 || phase !== 'choose2') return;
     var chosen = choose2Cards[idx];
-    setDrawnHistory(function(h) { return h.concat(chosen); });
-    setChoose2Cards(null);
-    resolveCard(chosen, boons, shopRerolls, winDrawCount);
+    var newHistory = drawnHistory.concat(chosen);
+    setDrawnHistory(newHistory);
+    setChoose2Cards([]);
+    if (isBoonDeckCard(chosen)) {
+      setCurrentBoonCard(chosen);
+      setCurrentCard('boon');
+      resolveBoonCard(chosen, deck, boons, shopRerolls, winDrawCount, newHistory, tonyDrawCount);
+    } else {
+      setCurrentCard(chosen);
+      resolveCard(chosen, deck, boons, shopRerolls, winDrawCount);
+    }
+  }
+
+  // ── Dave / Tony: player picks one of N drawn cards ────────────────────
+  function handleChooseCardEffect(idx: number) {
+    if (cardChoices.length === 0 || phase !== 'choose_card_effect') return;
+    var chosen = cardChoices[idx];
+    setCardChoices([]);
+    var newHistory = drawnHistory.concat(chosen);
+    setDrawnHistory(newHistory);
+    if (isBoonDeckCard(chosen)) {
+      setCurrentBoonCard(chosen);
+      setCurrentCard('boon');
+      resolveBoonCard(chosen, deck, boons, shopRerolls, winDrawCount, newHistory, tonyDrawCount);
+    } else {
+      setCurrentCard(chosen);
+      resolveCard(chosen, deck, boons, shopRerolls, winDrawCount);
+    }
   }
 
   // ── Reroll the shop ───────────────────────────────────────────────────
@@ -252,6 +529,20 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setShopChoices(drawPick4BoonChoices(boons, SHOP_SIZE, level));
   }
   function pickBoon(boon: Pick4BoonTemplate) {
+    // ── Card boons go into the deck, not the boon hand ──────────────────
+    if (boon.isCardBoon) {
+      var cbDeck = deck.slice();
+      var cbPos  = Math.floor(Math.random() * (cbDeck.length + 1));
+      cbDeck.splice(cbPos, 0, makeBoonDeckCard(boon.id));
+      setDeck(cbDeck);
+      setShopChoices([]);
+      setCollection(function(prev) {
+        var next = new Set(prev); next.add(boon.id); savePick4Collection(next); return next;
+      });
+      setPhase('idle');
+      return;
+    }
+
     var newDeck    = deck.slice();
     var newHistory = drawnHistory.slice();
     var newRerolls = shopRerolls;
@@ -332,12 +623,15 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setBoons([]);
     setDrawCount(0);
     setWinDrawCount(0);
+    setTonyDrawCount(0);
     setShopRerolls(0);
     setPhase('idle');
     setBaseCard(null);
     setCurrentCard(null);
+    setCurrentBoonCard(null);
     setSavedAnimActive(false);
-    setChoose2Cards(null);
+    setChoose2Cards([]);
+    setCardChoices([]);
     setShopChoices([]);
     setShowLevelUp(false);
   }
@@ -401,17 +695,24 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
 
           {/* Empty slot / drawn card */}
           <div className="pick4-slot">
-            {(phase === 'idle' || phase === 'choose2') && <div className="pick4-slot-empty" />}
+            {(phase === 'idle' || phase === 'choose2' || phase === 'choose_card_effect') && <div className="pick4-slot-empty" />}
 
-            {phase !== 'idle' && phase !== 'choose2' && (
+            {phase !== 'idle' && phase !== 'choose2' && phase !== 'choose_card_effect' && (
               <div className={'pick4-card-wrapper' + (phase === 'drawing' ? ' pick4-card-flying' : '')}>
                 {(function() {
-                  var showSaved  = isSaved && savedAnimActive;
-                  // Keep the card face as LOSE while a boon save is in progress so the
-                  // LOSE card is visible beneath the golden overlay as it animates in.
-                  var cardClass  = currentCard === 'win' && !isSaved ? 'pick4-card-win' : 'pick4-card-lose';
-                  // Show LOSE text until the overlay appears; the overlay covers this once active.
-                  var cardText   = showSaved ? 'SAVED!' : (isSaved ? 'LOSE' : (currentCard === 'win' ? 'WIN' : 'LOSE'));
+                  var showSaved = isSaved && savedAnimActive;
+                  var boonTemplate = currentBoonCard
+                    ? PICK4_BOON_TEMPLATES.find(function(b) { return b.id === currentBoonCard.boonId; })
+                    : null;
+                  var cardClass: string;
+                  var cardText: string;
+                  if (boonTemplate) {
+                    cardClass = 'pick4-card-boon pick4-card-boon-' + boonTemplate.rarity;
+                    cardText  = boonTemplate.name;
+                  } else {
+                    cardClass = currentCard === 'win' && !isSaved ? 'pick4-card-win' : 'pick4-card-lose';
+                    cardText  = showSaved ? 'SAVED!' : (isSaved ? 'LOSE' : (currentCard === 'win' ? 'WIN' : 'LOSE'));
+                  }
                   return (
                     <div className={
                       'pick4-card-inner'
@@ -441,7 +742,15 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
           <button className="pick4-draw-btn" onClick={handleDraw}>DRAW</button>
         )}
 
-        {/* Boon stack */}
+        {/* View Deck button */}
+        <button
+          className="pick4-view-deck-btn"
+          onClick={function(e) { e.stopPropagation(); setShowDeckView(true); }}
+        >
+          VIEW DECK ({deckWins + deckLoses + deckBoons.length})
+        </button>
+
+        {/* Boon stack (held boons only — card boons live in the deck) */}
         {boons.length > 0 && (
           <div className="pick4-boon-stack">
             <div className="pick4-boon-stack-items">
@@ -454,19 +763,55 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
       </div>
 
       {/* ── Oracle's Vision: choose 2 overlay ── */}
-      {phase === 'choose2' && choose2Cards && (
+      {phase === 'choose2' && choose2Cards.length > 0 && (
         <div className="game-overlay" onClick={function(e) { e.stopPropagation(); }}>
           <div className="shop-panel">
             <div className="shop-label">CHOOSE A CARD</div>
             <div className="pick4-choose2-cards">
               {choose2Cards.map(function(card, i) {
+                var isBC = isBoonDeckCard(card);
+                var bc   = isBC ? card as BoonDeckCard : null;
+                var tpl  = bc ? PICK4_BOON_TEMPLATES.find(function(b) { return b.id === bc!.boonId; }) : null;
+                var cardClass = isBC
+                  ? ('pick4-choose2-card pick4-card-front pick4-card-boon pick4-card-boon-' + (tpl ? tpl.rarity : 'common'))
+                  : ('pick4-choose2-card pick4-card-front ' + (card === 'win' ? 'pick4-card-win' : 'pick4-card-lose'));
+                var label = isBC ? (tpl ? tpl.name : 'BOON') : (card === 'win' ? 'WIN' : 'LOSE');
                 return (
                   <div
                     key={i}
-                    className={'pick4-choose2-card pick4-card-front ' + (card === 'win' ? 'pick4-card-win' : 'pick4-card-lose')}
-                    onClick={function() { handleChoose2(i as 0 | 1); }}
+                    className={cardClass}
+                    onClick={function() { handleChoose2(i); }}
                   >
-                    {card === 'win' ? 'WIN' : 'LOSE'}
+                    {label}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Dave / Tony: choose card effect overlay ── */}
+      {phase === 'choose_card_effect' && cardChoices.length > 0 && (
+        <div className="game-overlay" onClick={function(e) { e.stopPropagation(); }}>
+          <div className="shop-panel">
+            <div className="shop-label">CHOOSE AN EFFECT</div>
+            <div className="pick4-choose2-cards">
+              {cardChoices.map(function(card, i) {
+                var isBC = isBoonDeckCard(card);
+                var bc   = isBC ? card as BoonDeckCard : null;
+                var tpl  = bc ? PICK4_BOON_TEMPLATES.find(function(b) { return b.id === bc!.boonId; }) : null;
+                var cardClass = isBC
+                  ? ('pick4-choose2-card pick4-card-front pick4-card-boon pick4-card-boon-' + (tpl ? tpl.rarity : 'common'))
+                  : ('pick4-choose2-card pick4-card-front ' + (card === 'win' ? 'pick4-card-win' : 'pick4-card-lose'));
+                var label = isBC ? (tpl ? tpl.name : 'BOON') : (card === 'win' ? 'WIN' : 'LOSE');
+                return (
+                  <div
+                    key={i}
+                    className={cardClass}
+                    onClick={function() { handleChooseCardEffect(i); }}
+                  >
+                    {label}
                   </div>
                 );
               })}
@@ -513,6 +858,7 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
                     <div className="boon-card-rarity" style={{ color: c }}>{b.rarity}</div>
                     <div className="boon-card-name">{b.name}</div>
                     <div className="boon-card-desc">{b.desc}</div>
+                    {b.isCardBoon && <div className="boon-card-deck-badge">CARD &mdash; GOES IN DECK</div>}
                   </div>
                 );
               })}
@@ -570,6 +916,48 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
       {showLevelUp && (
         <div className="growing-overlay">
           <div className="growing-text">LEVEL UP</div>
+        </div>
+      )}
+
+      {/* ── View Deck modal ── */}
+      {showDeckView && (
+        <div className="menu-overlay" onClick={function(e) { e.stopPropagation(); setShowDeckView(false); }}>
+          <div className="pick4-deck-view-panel" onClick={function(e) { e.stopPropagation(); }}>
+            <div className="pick4-deck-view-title">DECK CONTENTS</div>
+            <div className="pick4-deck-view-grid">
+              {deckWins > 0 && (
+                <div className="pick4-deck-view-card pick4-deck-view-win">
+                  <span className="pick4-deck-view-count">&times;{deckWins}</span>
+                  <span className="pick4-deck-view-label">WIN</span>
+                </div>
+              )}
+              {deckLoses > 0 && (
+                <div className="pick4-deck-view-card pick4-deck-view-lose">
+                  <span className="pick4-deck-view-count">&times;{deckLoses}</span>
+                  <span className="pick4-deck-view-label">LOSE</span>
+                </div>
+              )}
+              {deckBoons.map(function(bc) {
+                var tpl = PICK4_BOON_TEMPLATES.find(function(b) { return b.id === bc.boonId; });
+                var rarity = tpl ? tpl.rarity : 'common';
+                return (
+                  <div
+                    key={bc.iid}
+                    className={'pick4-deck-view-card pick4-deck-view-boon pick4-deck-view-boon-' + rarity}
+                  >
+                    <span className="pick4-deck-view-rarity">{rarity}</span>
+                    <span className="pick4-deck-view-label">{tpl ? tpl.name : bc.boonId}</span>
+                  </div>
+                );
+              })}
+              {deckWins === 0 && deckLoses === 0 && deckBoons.length === 0 && (
+                <div className="pick4-deck-view-empty">Deck is empty</div>
+              )}
+            </div>
+            <button className="menu-btn-close" onClick={function(e) { e.stopPropagation(); setShowDeckView(false); }}>
+              CLOSE
+            </button>
+          </div>
         </div>
       )}
 

@@ -3,6 +3,26 @@
 
 export type Pick4Rarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 
+/** A card in the deck that represents a drawn boon card. */
+export interface BoonDeckCard {
+  type: 'boon';
+  boonId: string;
+  iid: string;
+}
+
+/** A single card in the Pick 4 deck (win, lose, or a boon card). */
+export type DeckCard = 'win' | 'lose' | BoonDeckCard;
+
+/** Type guard: returns true if a DeckCard is a boon card object. */
+export function isBoonDeckCard(c: DeckCard): c is BoonDeckCard {
+  return typeof c === 'object' && c.type === 'boon';
+}
+
+/** Create a new boon deck card instance for a given boon template id. */
+export function makeBoonDeckCard(boonId: string): BoonDeckCard {
+  return { type: 'boon', boonId: boonId, iid: makeP4Iid(boonId) };
+}
+
 /** A boon template as defined in PICK4_BOON_TEMPLATES. */
 export interface Pick4BoonTemplate {
   id: string;
@@ -14,6 +34,11 @@ export interface Pick4BoonTemplate {
   desc: string;
   /** Starting charges for charge-based boons (e.g. Aegis). */
   charges?: number;
+  /**
+   * When true this boon is a "card boon": purchasing it inserts a card into
+   * the deck rather than adding a permanent boon to the boon hand.
+   */
+  isCardBoon?: boolean;
 }
 
 /** A boon instance held by the player (template + unique instance id + live charges). */
@@ -158,6 +183,99 @@ export const PICK4_BOON_TEMPLATES: Pick4BoonTemplate[] = [
     effect: 'lose_50pct_win',
     desc: "Whenever you draw a lose card, 50% chance for it to become a win instead.",
   },
+  // ── Uncommon card boons ───────────────────────────────────────────────
+  {
+    id: 'p4_card_dave',
+    name: 'Dave',
+    rarity: 'uncommon',
+    w: 4,
+    effect: 'card_dave',
+    isCardBoon: true,
+    desc: 'When drawn: immediately draw two cards and choose one of those whose effects to apply.',
+  },
+  {
+    id: 'p4_card_andrew',
+    name: 'Andrew',
+    rarity: 'uncommon',
+    w: 4,
+    effect: 'card_andrew',
+    isCardBoon: true,
+    desc: 'When drawn: add a random uncommon boon card to your deck.',
+  },
+  {
+    id: 'p4_card_jessica',
+    name: 'Jessica',
+    rarity: 'uncommon',
+    w: 4,
+    effect: 'card_jessica',
+    isCardBoon: true,
+    desc: 'When drawn: shuffle all previously drawn cards back into the deck, then draw a card.',
+  },
+  // ── Rare card boons ───────────────────────────────────────────────────
+  {
+    id: 'p4_card_tom',
+    name: 'Tom',
+    rarity: 'rare',
+    w: 2,
+    effect: 'card_tom',
+    isCardBoon: true,
+    desc: 'When drawn: discard the top 5 cards of the deck, then draw a card.',
+  },
+  {
+    id: 'p4_card_marry',
+    name: 'Marry',
+    rarity: 'rare',
+    w: 2,
+    effect: 'card_marry',
+    isCardBoon: true,
+    desc: 'When drawn: gain one shop reroll. Counts as a win.',
+  },
+  {
+    id: 'p4_card_herald',
+    name: 'Herald',
+    rarity: 'rare',
+    w: 2,
+    effect: 'card_herald',
+    isCardBoon: true,
+    desc: 'When drawn: permanently destroy this card and 3 random cards from the deck.',
+  },
+  // ── Legendary card boons ──────────────────────────────────────────────
+  {
+    id: 'p4_card_wanda',
+    name: 'Wanda',
+    rarity: 'legendary',
+    w: 1,
+    effect: 'card_wanda',
+    isCardBoon: true,
+    desc: 'When drawn: add two copies of it to your deck, then draw a card.',
+  },
+  {
+    id: 'p4_card_tony',
+    name: 'Tony',
+    rarity: 'legendary',
+    w: 1,
+    effect: 'card_tony',
+    isCardBoon: true,
+    desc: "When drawn: draw a card for each time you've drawn a Tony this game, then choose one of those whose effects to apply.",
+  },
+  {
+    id: 'p4_card_sarah',
+    name: 'Sarah',
+    rarity: 'legendary',
+    w: 1,
+    effect: 'card_sarah',
+    isCardBoon: true,
+    desc: 'While in deck: when you draw a win, add a win to your deck. Sarah counts as a win when drawn.',
+  },
+  {
+    id: 'p4_card_alfred',
+    name: 'Alfred',
+    rarity: 'legendary',
+    w: 1,
+    effect: 'card_alfred',
+    isCardBoon: true,
+    desc: 'While in deck: when you draw a lose, instead win and destroy a win in your deck. Alfred counts as a win when drawn.',
+  },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -171,9 +289,9 @@ function shuffleArr<T>(arr: T[]): T[] {
   return a;
 }
 
-/** Build and shuffle a fresh 52-card deck. */
-export function makePick4Deck(wins: number, loses: number): ('win' | 'lose')[] {
-  var cards: ('win' | 'lose')[] = [];
+/** Build and shuffle a fresh deck. */
+export function makePick4Deck(wins: number, loses: number): DeckCard[] {
+  var cards: DeckCard[] = [];
   for (var i = 0; i < wins; i++) cards.push('win');
   for (var i = 0; i < loses; i++) cards.push('lose');
   return shuffleArr(cards);
@@ -181,7 +299,9 @@ export function makePick4Deck(wins: number, loses: number): ('win' | 'lose')[] {
 
 /**
  * Draw `count` boon choices from PICK4_BOON_TEMPLATES, weighted by `w` scaled
- * by the level-based rarity multiplier, excluding boon IDs already held.
+ * by the level-based rarity multiplier, excluding non-card boon IDs already held.
+ * Card boons (isCardBoon: true) can always appear since they live in the deck,
+ * not in the held boon list.
  */
 export function drawPick4BoonChoices(
   heldBoons: Pick4BoonInstance[],
@@ -189,7 +309,8 @@ export function drawPick4BoonChoices(
   level: number
 ): Pick4BoonTemplate[] {
   var heldIds = new Set(heldBoons.map(function(b) { return b.id; }));
-  var available = PICK4_BOON_TEMPLATES.filter(function(b) { return !heldIds.has(b.id); });
+  // Card boons are never in the held list; exclude only regular held boons.
+  var available = PICK4_BOON_TEMPLATES.filter(function(b) { return b.isCardBoon || !heldIds.has(b.id); });
   if (available.length === 0) return [];
 
   var chosen: Pick4BoonTemplate[] = [];

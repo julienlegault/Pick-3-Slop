@@ -1031,3 +1031,166 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   gap: 5px;
   flex-wrap: wrap;
 }
+
+/* ── View Deck button ── */
+.pick4-view-deck-btn {
+  margin-top: 12px;
+  padding: 5px 18px;
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  color: #888;
+  font-size: .58rem;
+  font-family: 'Cinzel', serif;
+  letter-spacing: .28em;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, box-shadow .15s;
+}
+.pick4-view-deck-btn:hover {
+  color: #D4AF37;
+  border-color: #D4AF37;
+  box-shadow: 0 0 14px rgba(212,175,55,.18);
+}
+
+/* ── Boon card face (drawn card slot) ── */
+.pick4-card-boon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: .72rem;
+  letter-spacing: .12em;
+  padding: 6px;
+  text-align: center;
+}
+.pick4-card-boon-common {
+  background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+  border: 2px solid #909090;
+  color: #c0c0c0;
+  box-shadow: 0 0 18px rgba(144,144,144,.25);
+}
+.pick4-card-boon-uncommon {
+  background: linear-gradient(135deg, #0a1428 0%, #050e1a 100%);
+  border: 2px solid #4a9eff;
+  color: #4a9eff;
+  box-shadow: 0 0 18px rgba(74,158,255,.25);
+  text-shadow: 0 0 10px rgba(74,158,255,.4);
+}
+.pick4-card-boon-rare {
+  background: linear-gradient(135deg, #180a28 0%, #0e051a 100%);
+  border: 2px solid #c060ff;
+  color: #c060ff;
+  box-shadow: 0 0 18px rgba(192,96,255,.25);
+  text-shadow: 0 0 10px rgba(192,96,255,.4);
+}
+.pick4-card-boon-legendary {
+  background: linear-gradient(135deg, #1e1408 0%, #120d04 100%);
+  border: 2px solid #D4AF37;
+  color: #D4AF37;
+  box-shadow: 0 0 18px rgba(212,175,55,.3);
+  text-shadow: 0 0 10px rgba(212,175,55,.4);
+}
+
+/* ── Deck view modal ── */
+.pick4-deck-view-panel {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 24px 22px 18px;
+  width: min(92vw, 560px);
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: overlayIn .2s ease both;
+}
+.pick4-deck-view-title {
+  font-size: .82rem;
+  letter-spacing: .34em;
+  color: #D4AF37;
+  margin-bottom: 4px;
+}
+.pick4-deck-view-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  width: 100%;
+}
+.pick4-deck-view-card {
+  width: 80px;
+  min-height: 100px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 4px;
+  font-family: 'Cinzel', serif;
+  text-align: center;
+}
+.pick4-deck-view-count {
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.pick4-deck-view-label {
+  font-size: .55rem;
+  letter-spacing: .18em;
+  font-weight: 700;
+}
+.pick4-deck-view-rarity {
+  font-size: .42rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  opacity: .75;
+}
+.pick4-deck-view-win {
+  background: linear-gradient(135deg, #0a2a14 0%, #051408 100%);
+  border: 2px solid #22C55E;
+  color: #22C55E;
+  box-shadow: 0 0 14px rgba(34,197,94,.15);
+}
+.pick4-deck-view-lose {
+  background: linear-gradient(135deg, #2a0a0a 0%, #140505 100%);
+  border: 2px solid #CC1010;
+  color: #CC1010;
+  box-shadow: 0 0 14px rgba(204,16,16,.15);
+}
+.pick4-deck-view-boon {
+  background: #0e0e0e;
+}
+.pick4-deck-view-boon-common {
+  border: 2px solid #909090;
+  color: #c0c0c0;
+}
+.pick4-deck-view-boon-uncommon {
+  border: 2px solid #4a9eff;
+  color: #4a9eff;
+}
+.pick4-deck-view-boon-rare {
+  border: 2px solid #c060ff;
+  color: #c060ff;
+}
+.pick4-deck-view-boon-legendary {
+  border: 2px solid #D4AF37;
+  color: #D4AF37;
+}
+.pick4-deck-view-empty {
+  color: #555;
+  font-size: .65rem;
+  letter-spacing: .2em;
+  padding: 20px 0;
+}
+
+/* ── Shop card badge for card boons ── */
+.boon-card-deck-badge {
+  font-size: .44rem;
+  letter-spacing: .16em;
+  color: #D4AF37;
+  opacity: .8;
+  margin-top: 2px;
+}
