@@ -83,16 +83,16 @@ export function TileReveal({ phase, rtile, revealDoom, revealFlip }) {
               transform: 'rotate(45deg)',
               transformOrigin: '0 0',
               display: 'flex',
-              flexDirection: 'row',
+              flexDirection: 'column',
               gap: '6px',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               animation: 'rescueTextFade .3s ease',
               pointerEvents: 'none',
             }}>
               <span style={{
                 border: '1px solid ' + sc,
                 color: sc,
-                background: sc + '14',
+                background: 'rgba(10,10,10,0.88)',
                 padding: '3px 8px',
                 fontSize: '.62rem',
                 fontFamily: "'Cinzel', serif",
@@ -106,7 +106,7 @@ export function TileReveal({ phase, rtile, revealDoom, revealFlip }) {
                 <span style={{
                   border: '1px solid #ff4444',
                   color: '#ff4444',
-                  background: '#ff444414',
+                  background: 'rgba(10,10,10,0.88)',
                   padding: '3px 8px',
                   fontSize: '.62rem',
                   fontFamily: "'Cinzel', serif",
