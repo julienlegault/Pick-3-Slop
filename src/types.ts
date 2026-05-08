@@ -164,4 +164,6 @@ export interface SpinResult {
   savedByBoon?: Boon | null;
   /** For sacrifice_instead rescues: the boon object that was destroyed. */
   sacrificedBoon?: Boon | null;
+  /** True when the saving boon itself was consumed by the rescue (e.g. shield depleted, fragile broke). */
+  savedBoonConsumed?: boolean;
 }

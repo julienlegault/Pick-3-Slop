@@ -42,6 +42,16 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   from { opacity: 0; }
   to { opacity: 1; }
 }
+@keyframes boonCrackTop {
+  0%   { transform: translateY(0) rotate(0deg) translateX(0); opacity: 1; filter: brightness(1); }
+  18%  { transform: translateY(-1px) rotate(0deg) translateX(0); opacity: 1; filter: brightness(2.8); }
+  100% { transform: translateY(-11px) rotate(-7deg) translateX(-4px); opacity: 0; filter: brightness(1); }
+}
+@keyframes boonCrackBottom {
+  0%   { transform: translateY(0) rotate(0deg) translateX(0); opacity: 1; filter: brightness(1); }
+  18%  { transform: translateY(1px) rotate(0deg) translateX(0); opacity: 1; filter: brightness(2.8); }
+  100% { transform: translateY(11px) rotate(7deg) translateX(4px); opacity: 0; filter: brightness(1); }
+}
 
 /* ── App shell ───────────────────────────────────────────────────────── */
 .app-root {
