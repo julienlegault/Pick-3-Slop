@@ -145,7 +145,7 @@ export function useGameState() {
     setAnim(false);
     setWdeg(d.targetDeg);
     setBoons(d.fb);
-    setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan, isDoom: d.isDoom, savedByBoon: d.savedByBoon || null, sacrificedBoon: d.sacrificedBoon || null });
+    setRtile({ type: d.result, baseType: d.baseType, halfSpan: d.halfSpan, isDoom: d.isDoom, savedByBoon: d.savedByBoon || null, sacrificedBoon: d.sacrificedBoon || null, savedBoonConsumed: d.savedBoonConsumed || false });
     setRevealFlip(false);
     setRevealDoom(false);
     setPhase('reveal');
@@ -238,6 +238,7 @@ export function useGameState() {
     var result = landed, fb = spinBoons, triggered = [];
     var savedByBoon = null;
     var sacrificedBoon = null;
+    var savedBoonConsumed = false;
     if (landed === 'lose' || doomFired) {
       if (doomFired) result = 'lose'; // doom forces a loss before rescue check
       var res = tryRescue(spinBoons);
@@ -253,6 +254,8 @@ export function useGameState() {
             name: savingBoon.name + (savingGrp.length > 1 ? ' \xd7' + savingGrp.length : ''),
             rarity: getGroupDisplayRarity(savingGrp),
           });
+          // Detect if the saving boon was itself consumed (e.g. shield depleted, fragile broke)
+          savedBoonConsumed = !res.boons.some(function(b) { return b.iid === res.savedByIid; });
         }
       }
       if (res.sacrificedBoon) sacrificedBoon = res.sacrificedBoon;
@@ -273,6 +276,7 @@ export function useGameState() {
       nonCommonPickStreak: nonCommonPickStreak,
       isEndless: isEndless, endlessSpin: endlessSpin, doomGroupKeys: doomGroupKeys,
       isDoom: doomFired, savedByBoon: savedByBoon, sacrificedBoon: sacrificedBoon,
+      savedBoonConsumed: savedBoonConsumed,
     };
     doneRef.current = false;
     spinInteractGuardRef.current = true;

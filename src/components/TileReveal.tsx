@@ -1,6 +1,53 @@
 import { revealWedge } from '../logic';
 import { RC } from '../logic';
 
+// CrackTag — renders a boon label that visually cracks in half after a short delay.
+// Uses two overlapping clipped spans (top/bottom halves) that animate apart.
+function CrackTag({ name, color, background, delay }: { name: string; color: string; background: string; delay: number }) {
+  var halfStyle = {
+    border: '1px solid ' + color,
+    color: color,
+    background: background,
+    padding: '3px 8px',
+    fontSize: '.62rem',
+    fontFamily: "'Cinzel', serif",
+    borderRadius: '2px',
+    whiteSpace: 'nowrap' as const,
+    display: 'inline-block',
+  };
+  return (
+    <span style={{ position: 'relative', display: 'inline-block', overflow: 'visible' }}>
+      {/* top half */}
+      <span style={{
+        ...halfStyle,
+        clipPath: 'inset(0 0 50% 0)',
+        animationName: 'boonCrackTop',
+        animationDuration: '0.42s',
+        animationDelay: delay + 's',
+        animationFillMode: 'forwards',
+        animationTimingFunction: 'ease-in',
+      }}>
+        {name}
+      </span>
+      {/* bottom half — absolutely overlaid on the top half */}
+      <span style={{
+        ...halfStyle,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        clipPath: 'inset(50% 0 0 0)',
+        animationName: 'boonCrackBottom',
+        animationDuration: '0.42s',
+        animationDelay: delay + 's',
+        animationFillMode: 'forwards',
+        animationTimingFunction: 'ease-in',
+      }}>
+        {name}
+      </span>
+    </span>
+  );
+}
+
 // TileReveal — the reveal overlay card shown during the 'reveal' phase.
 // Returns null when phase !== 'reveal' or rtile is absent.
 export function TileReveal({ phase, rtile, revealDoom, revealFlip }) {
@@ -75,6 +122,9 @@ export function TileReveal({ phase, rtile, revealDoom, revealFlip }) {
         {showSavedBoon && (function() {
           var sb = rtile.savedByBoon;
           var sc = RC[sb.rarity] || '#909090';
+          var savedConsumed = !!rtile.savedBoonConsumed;
+          // Crack animation delay from when tags mount (rescueTextFade is 0.3s; crack starts 0.2s after fade)
+          var crackDelay = 0.5;
           return (
             <div style={{
               position: 'absolute',
@@ -89,23 +139,12 @@ export function TileReveal({ phase, rtile, revealDoom, revealFlip }) {
               animation: 'rescueTextFade .3s ease',
               pointerEvents: 'none',
             }}>
-              <span style={{
-                border: '1px solid ' + sc,
-                color: sc,
-                background: 'rgba(10,10,10,0.88)',
-                padding: '3px 8px',
-                fontSize: '.62rem',
-                fontFamily: "'Cinzel', serif",
-                borderRadius: '2px',
-                whiteSpace: 'nowrap',
-                display: 'inline-block',
-              }}>
-                {sb.name}
-              </span>
-              {rtile.sacrificedBoon && (
+              {savedConsumed ? (
+                <CrackTag name={sb.name} color={sc} background="rgba(10,10,10,0.88)" delay={crackDelay} />
+              ) : (
                 <span style={{
-                  border: '1px solid #ff4444',
-                  color: '#ff4444',
+                  border: '1px solid ' + sc,
+                  color: sc,
                   background: 'rgba(10,10,10,0.88)',
                   padding: '3px 8px',
                   fontSize: '.62rem',
@@ -114,8 +153,11 @@ export function TileReveal({ phase, rtile, revealDoom, revealFlip }) {
                   whiteSpace: 'nowrap',
                   display: 'inline-block',
                 }}>
-                  {rtile.sacrificedBoon.name}
+                  {sb.name}
                 </span>
+              )}
+              {rtile.sacrificedBoon && (
+                <CrackTag name={rtile.sacrificedBoon.name} color="#ff4444" background="rgba(10,10,10,0.88)" delay={crackDelay} />
               )}
             </div>
           );
