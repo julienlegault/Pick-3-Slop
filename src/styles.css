@@ -1186,6 +1186,24 @@ html, body { min-height: 100vh; background: #0f0f0f; }
   padding: 20px 0;
 }
 
+/* ── Testing mode: deletable deck cards ── */
+.pick4-deck-view-deletable {
+  cursor: pointer;
+  position: relative;
+}
+.pick4-deck-view-deletable:hover {
+  opacity: 0.75;
+  outline: 2px solid #f55;
+}
+.pick4-deck-view-delete-icon {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: .65rem;
+  color: #f55;
+  line-height: 1;
+}
+
 /* ── Shop card badge for card boons ── */
 .boon-card-deck-badge {
   font-size: .44rem;

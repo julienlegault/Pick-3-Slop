@@ -58,6 +58,9 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
   var [showLevelUp, setShowLevelUp] = useState(false);
   var [showDeckView, setShowDeckView] = useState(false);
 
+  // ── Testing mode (enabled via ?testing URL parameter) ─────────────────
+  var testingMode = new URLSearchParams(window.location.search).has('testing');
+
   // ── Timer helpers ─────────────────────────────────────────────────────
   var timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   function later(fn: () => void, ms: number) {
@@ -614,6 +617,21 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
     setPhase('idle');
   }
 
+  // ── Testing: delete a card from the deck ─────────────────────────────
+  function handleDeleteCard(type: 'win' | 'lose' | 'boon', boonIid?: string) {
+    setDeck(function(curDeck) {
+      var newDeck = curDeck.slice();
+      if (type === 'boon' && boonIid !== undefined) {
+        var idx = newDeck.findIndex(function(c) { return isBoonDeckCard(c) && (c as BoonDeckCard).iid === boonIid; });
+        if (idx !== -1) newDeck.splice(idx, 1);
+      } else {
+        var idx2 = newDeck.findIndex(function(c) { return c === type; });
+        if (idx2 !== -1) newDeck.splice(idx2, 1);
+      }
+      return newDeck;
+    });
+  }
+
   // ── Restart ───────────────────────────────────────────────────────────
   function handleRestart() {
     clearTimers();
@@ -923,18 +941,31 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
       {showDeckView && (
         <div className="menu-overlay" onClick={function(e) { e.stopPropagation(); setShowDeckView(false); }}>
           <div className="pick4-deck-view-panel" onClick={function(e) { e.stopPropagation(); }}>
-            <div className="pick4-deck-view-title">DECK CONTENTS</div>
+            <div className="pick4-deck-view-title">
+              DECK CONTENTS
+              {testingMode && <span style={{ fontSize: '0.6em', marginLeft: '8px', color: '#f55', verticalAlign: 'middle' }}>TESTING — click card to delete</span>}
+            </div>
             <div className="pick4-deck-view-grid">
               {deckWins > 0 && (
-                <div className="pick4-deck-view-card pick4-deck-view-win">
+                <div
+                  className={'pick4-deck-view-card pick4-deck-view-win' + (testingMode ? ' pick4-deck-view-deletable' : '')}
+                  onClick={testingMode ? function(e) { e.stopPropagation(); handleDeleteCard('win'); } : undefined}
+                  title={testingMode ? 'Click to remove one WIN card' : undefined}
+                >
                   <span className="pick4-deck-view-count">&times;{deckWins}</span>
                   <span className="pick4-deck-view-label">WIN</span>
+                  {testingMode && <span className="pick4-deck-view-delete-icon">✕</span>}
                 </div>
               )}
               {deckLoses > 0 && (
-                <div className="pick4-deck-view-card pick4-deck-view-lose">
+                <div
+                  className={'pick4-deck-view-card pick4-deck-view-lose' + (testingMode ? ' pick4-deck-view-deletable' : '')}
+                  onClick={testingMode ? function(e) { e.stopPropagation(); handleDeleteCard('lose'); } : undefined}
+                  title={testingMode ? 'Click to remove one LOSE card' : undefined}
+                >
                   <span className="pick4-deck-view-count">&times;{deckLoses}</span>
                   <span className="pick4-deck-view-label">LOSE</span>
+                  {testingMode && <span className="pick4-deck-view-delete-icon">✕</span>}
                 </div>
               )}
               {deckBoons.map(function(bc) {
@@ -943,10 +974,13 @@ export function Pick4Page({ navigateToPick3 }: Pick4PageProps) {
                 return (
                   <div
                     key={bc.iid}
-                    className={'pick4-deck-view-card pick4-deck-view-boon pick4-deck-view-boon-' + rarity}
+                    className={'pick4-deck-view-card pick4-deck-view-boon pick4-deck-view-boon-' + rarity + (testingMode ? ' pick4-deck-view-deletable' : '')}
+                    onClick={testingMode ? function(e) { e.stopPropagation(); handleDeleteCard('boon', bc.iid); } : undefined}
+                    title={testingMode ? 'Click to remove this card from deck' : undefined}
                   >
                     <span className="pick4-deck-view-rarity">{rarity}</span>
                     <span className="pick4-deck-view-label">{tpl ? tpl.name : bc.boonId}</span>
+                    {testingMode && <span className="pick4-deck-view-delete-icon">✕</span>}
                   </div>
                 );
               })}
